@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\Product;
 
 class DashboardController extends Controller
 {
@@ -15,35 +17,62 @@ class DashboardController extends Controller
             $period = $request->query('period', 'today');
             $now = Carbon::now();
             
-            $query = Sale::where('status', 'completed');
-            $itemQuery = \App\Models\SaleItem::whereHas('sale', function($q) use ($period, $now) {
+            $dateCondition = function($query) use ($period, $now) {
+                $query->where('status', 'completed');
+                if ($period === 'today') {
+                    $query->whereDate('created_at', $now->today());
+                } elseif ($period === 'week') {
+                    $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+                } elseif ($period === 'month') {
+                    $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                } elseif ($period === 'year') {
+                    $query->whereYear('created_at', $now->year);
+                }
+            };
+
+            // Sales Query
+            $salesQuery = Sale::where('status', 'completed');
+            $dateCondition($salesQuery);
+            
+            // Metrics
+            $totalSales = $salesQuery->sum('total') ?? 0;
+            $totalTransactions = $salesQuery->count();
+            $avgSale = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
+            
+            // Items Sold
+            $itemsSold = SaleItem::whereHas('sale', function($q) use ($period, $now) {
                 $q->where('status', 'completed');
                 if ($period === 'today') $q->whereDate('created_at', $now->today());
                 elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
                 elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
                 elseif ($period === 'year') $q->whereYear('created_at', $now->year);
-            });
-
-            if ($period === 'today') $query->whereDate('created_at', $now->today());
-            elseif ($period === 'week') $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-            elseif ($period === 'month') $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-            elseif ($period === 'year') $query->whereYear('created_at', $now->year);
-
-            // Metrics
-            $totalSales = (clone $query)->sum('total') ?? 0;
-            $totalTransactions = (clone $query)->count();
-            $avgSale = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
-            $itemsSold = (clone $itemQuery)->sum('quantity') ?? 0;
+            })->sum('quantity') ?? 0;
             
             // Gross Profit
-            $itemsWithProduct = (clone $itemQuery)->with('product')->get();
+            $itemsWithProduct = SaleItem::with('product')
+                ->whereHas('sale', function($q) use ($period, $now) {
+                    $q->where('status', 'completed');
+                    if ($period === 'today') $q->whereDate('created_at', $now->today());
+                    elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+                    elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                    elseif ($period === 'year') $q->whereYear('created_at', $now->year);
+                })
+                ->get();
+                
             $totalCost = $itemsWithProduct->sum(function($item) {
                 return ($item->product ? $item->product->cost : 0) * $item->quantity;
             });
             $grossProfit = $totalSales - $totalCost;
             
             // Top Products
-            $topProducts = (clone $itemQuery)->with(['product', 'product.category'])
+            $topProducts = SaleItem::with(['product', 'product.category'])
+                ->whereHas('sale', function($q) use ($period, $now) {
+                    $q->where('status', 'completed');
+                    if ($period === 'today') $q->whereDate('created_at', $now->today());
+                    elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+                    elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                    elseif ($period === 'year') $q->whereYear('created_at', $now->year);
+                })
                 ->selectRaw('product_id, sum(quantity) as total_qty, sum(total) as total_sales')
                 ->groupBy('product_id')
                 ->orderByDesc('total_qty')
@@ -51,50 +80,24 @@ class DashboardController extends Controller
                 ->get();
             
             // Recent Sales
-            $recentSales = (clone $query)->with('customer')
+            $recentSales = Sale::with('customer')
+                ->where('status', 'completed')
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get();
             
             // Low Stock Products
-            $lowStockProducts = \App\Models\Product::where('is_active', 1)
+            $lowStockProducts = Product::where('is_active', 1)
                 ->where('stock_quantity', '<=', 10)
                 ->orderBy('stock_quantity', 'asc')
                 ->limit(5)
                 ->get();
 
-            // Chart Data: Sales Overview
-            $salesChartData = [];
-            if ($period === 'today') {
-                $salesData = (clone $query)->selectRaw('HOUR(created_at) as label, sum(total) as total')
-                    ->groupBy('label')->orderBy('label')->get();
-                for ($i = 0; $i < 24; $i++) {
-                    $match = $salesData->firstWhere('label', $i);
-                    $salesChartData['labels'][] = str_pad($i, 2, '0', STR_PAD_LEFT) . ':00';
-                    $salesChartData['data'][] = $match ? $match->total : 0;
-                }
-            } else {
-                $format = $period === 'year' || $period === 'all' ? 'Y-m' : 'Y-m-d';
-                $salesData = (clone $query)->selectRaw('DATE_FORMAT(created_at, "' . ($format === 'Y-m' ? '%Y-%m' : '%Y-%m-%d') . '") as label, sum(total) as total')
-                    ->groupBy('label')->orderBy('label')->get();
-                foreach ($salesData as $row) {
-                    $salesChartData['labels'][] = $row->label;
-                    $salesChartData['data'][] = $row->total;
-                }
-                if (empty($salesChartData['labels'])) {
-                    $salesChartData = ['labels' => [Carbon::today()->format($format)], 'data' => [0]];
-                }
-            }
-
-            // Chart Data: Payment Methods
-            $paymentData = (clone $query)->selectRaw('payment_method, sum(total) as total')
-                ->whereNotNull('payment_method')
-                ->groupBy('payment_method')
-                ->get();
-            $paymentChartData = [
-                'labels' => $paymentData->pluck('payment_method')->map(fn($v) => ucfirst($v))->toArray(),
-                'data' => $paymentData->pluck('total')->toArray()
-            ];
+            // Sales Chart Data
+            $salesChartData = $this->getSalesChartData($period, $now);
+            
+            // Payment Chart Data
+            $paymentChartData = $this->getPaymentChartData($period, $now);
 
             return view('dashboard', compact(
                 'totalSales',
@@ -113,5 +116,151 @@ class DashboardController extends Controller
         } catch (\Exception $e) {
             return "Dashboard Error: " . $e->getMessage() . "<br>File: " . $e->getFile() . "<br>Line: " . $e->getLine();
         }
+    }
+    
+    /**
+     * Get sales chart data based on period
+     */
+    private function getSalesChartData($period, $now)
+    {
+        $query = Sale::where('status', 'completed');
+        
+        if ($period === 'today') {
+            $query->whereDate('created_at', $now->today());
+            $salesData = $query->selectRaw('HOUR(created_at) as label, sum(total) as total')
+                ->groupBy('label')->orderBy('label')->get();
+                
+            $labels = [];
+            $data = [];
+            for ($i = 0; $i < 24; $i++) {
+                $match = $salesData->firstWhere('label', $i);
+                $labels[] = str_pad($i, 2, '0', STR_PAD_LEFT) . ':00';
+                $data[] = $match ? $match->total : 0;
+            }
+            return ['labels' => $labels, 'data' => $data];
+        }
+        
+        if ($period !== 'all') {
+            if ($period === 'week') {
+                $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+            } elseif ($period === 'month') {
+                $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+            } elseif ($period === 'year') {
+                $query->whereYear('created_at', $now->year);
+            }
+        }
+        
+        $format = $period === 'year' ? '%Y-%m' : '%Y-%m-%d';
+        $salesData = $query->selectRaw('DATE_FORMAT(created_at, "' . $format . '") as label, sum(total) as total')
+            ->groupBy('label')->orderBy('label')->get();
+            
+        return [
+            'labels' => $salesData->pluck('label')->toArray(),
+            'data' => $salesData->pluck('total')->toArray()
+        ];
+    }
+    
+    /**
+     * Get payment chart data
+     */
+    private function getPaymentChartData($period, $now)
+    {
+        $query = Sale::where('status', 'completed');
+        
+        if ($period === 'today') {
+            $query->whereDate('created_at', $now->today());
+        } elseif ($period === 'week') {
+            $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+        } elseif ($period === 'month') {
+            $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+        } elseif ($period === 'year') {
+            $query->whereYear('created_at', $now->year);
+        }
+        
+        $paymentData = $query->selectRaw('payment_method, sum(total) as total')
+            ->whereNotNull('payment_method')
+            ->groupBy('payment_method')
+            ->get();
+            
+        $labels = $paymentData->pluck('payment_method')->map(function($method) {
+            $method = ucfirst(str_replace('_', ' ', $method));
+            return $method === 'Mobile money' ? 'Mobile Money' : $method;
+        })->toArray();
+            
+        return [
+            'labels' => $labels,
+            'data' => $paymentData->pluck('total')->toArray()
+        ];
+    }
+
+    // ====== Report Methods ======
+    
+    /**
+     * Sales Report
+     */
+    public function salesReport(Request $request)
+    {
+        $startDate = $request->get('start_date', Carbon::now()->startOfMonth());
+        $endDate = $request->get('end_date', Carbon::now());
+        
+        if (is_string($startDate)) {
+            $startDate = Carbon::parse($startDate);
+        }
+        if (is_string($endDate)) {
+            $endDate = Carbon::parse($endDate);
+        }
+        
+        $sales = Sale::with('user', 'customer')
+            ->whereBetween('created_at', [$startDate, $endDate->endOfDay()])
+            ->where('status', 'completed')
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+        
+        $summary = [
+            'total_sales' => $sales->sum('total'),
+            'total_transactions' => $sales->count(),
+            'average_sale' => $sales->count() > 0 ? $sales->sum('total') / $sales->count() : 0,
+            'cash_sales' => $sales->where('payment_method', 'cash')->sum('total'),
+            'card_sales' => $sales->where('payment_method', 'card')->sum('total'),
+            'mobile_money_sales' => $sales->where('payment_method', 'mobile_money')->sum('total'),
+        ];
+        
+        return view('reports.sales', compact('sales', 'summary', 'startDate', 'endDate'));
+    }
+
+    /**
+     * Inventory Report
+     */
+    public function inventoryReport(Request $request)
+    {
+        $products = Product::with('category')
+            ->orderBy('name')
+            ->paginate(20);
+        
+        $totalValue = $products->sum(function($product) {
+            return $product->stock_quantity * $product->cost;
+        });
+        
+        $totalRetailValue = $products->sum(function($product) {
+            return $product->stock_quantity * $product->price;
+        });
+        
+        return view('reports.inventory', compact('products', 'totalValue', 'totalRetailValue'));
+    }
+
+    /**
+     * Low Stock Alert (AJAX)
+     */
+    public function lowStockAlert()
+    {
+        $lowStockProducts = Product::where('stock_quantity', '<=', 10)
+            ->where('is_active', true)
+            ->orderBy('stock_quantity', 'asc')
+            ->get();
+        
+        return response()->json([
+            'count' => $lowStockProducts->count(),
+            'products' => $lowStockProducts
+        ]);
     }
 }

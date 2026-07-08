@@ -21,6 +21,13 @@ $outlet = Outlet::firstOrCreate(['id' => 1], [
     'is_active' => true
 ]);
 
+$outlet2 = Outlet::firstOrCreate(['id' => 2], [
+    'name' => 'second Outlet',
+    'location' => 'Branch',
+    'contact_info' => '0798765432',
+    'is_active' => true
+]);
+
 User::withoutGlobalScopes()->whereNull('outlet_id')->update(['outlet_id' => 1]);
 Product::withoutGlobalScopes()->whereNull('outlet_id')->update(['outlet_id' => 1]);
 Sale::withoutGlobalScopes()->whereNull('outlet_id')->update(['outlet_id' => 1]);

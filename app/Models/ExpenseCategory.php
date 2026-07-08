@@ -2,18 +2,37 @@
 
 namespace App\Models;
 
-use App\Traits\BelongsToOutlet;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class ExpenseCategory extends Model
 {
-    use HasFactory, BelongsToOutlet;
+    use HasFactory;
 
-    protected $guarded = [];
+    protected $fillable = [
+        'name',
+        'slug',
+        'description',
+        'color',
+        'is_active'
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean'
+    ];
 
     public function expenses()
     {
-        return $this->hasMany(Expense::class, 'category_id');
+        return $this->hasMany(Expense::class);
+    }
+
+    public function getTotalExpensesAttribute()
+    {
+        return $this->expenses()->sum('amount');
+    }
+
+    public function getExpenseCountAttribute()
+    {
+        return $this->expenses()->count();
     }
 }

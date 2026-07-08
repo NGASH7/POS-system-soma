@@ -6,34 +6,58 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        $tables = ['users', 'products', 'sales', 'customers', 'categories', 'returns'];
+        // Check if outlet_id already exists before adding
+        if (!Schema::hasColumn('users', 'outlet_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->after('id')->constrained()->onDelete('set null');
+            });
+        }
 
-        foreach ($tables as $table) {
-            Schema::table($table, function (Blueprint $tableSchema) {
-                $tableSchema->unsignedBigInteger('outlet_id')->nullable()->after('id');
-                // We're making it nullable first so it doesn't fail on existing data
-                $tableSchema->foreign('outlet_id')->references('id')->on('outlets')->onDelete('cascade');
+        if (!Schema::hasColumn('products', 'outlet_id')) {
+            Schema::table('products', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->constrained()->onDelete('set null');
+            });
+        }
+
+        if (!Schema::hasColumn('sales', 'outlet_id')) {
+            Schema::table('sales', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->constrained()->onDelete('set null');
+            });
+        }
+
+        if (!Schema::hasColumn('customers', 'outlet_id')) {
+            Schema::table('customers', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->constrained()->onDelete('set null');
+            });
+        }
+
+        if (!Schema::hasColumn('categories', 'outlet_id')) {
+            Schema::table('categories', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->constrained()->onDelete('set null');
+            });
+        }
+
+        if (!Schema::hasColumn('returns', 'outlet_id')) {
+            Schema::table('returns', function (Blueprint $table) {
+                $table->foreignId('outlet_id')->nullable()->constrained()->onDelete('set null');
             });
         }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
+        // Drop columns if they exist
         $tables = ['users', 'products', 'sales', 'customers', 'categories', 'returns'];
-
-        foreach ($tables as $table) {
-            Schema::table($table, function (Blueprint $tableSchema) {
-                $tableSchema->dropForeign(['outlet_id']);
-                $tableSchema->dropColumn('outlet_id');
-            });
+        
+        foreach ($tables as $tableName) {
+            if (Schema::hasColumn($tableName, 'outlet_id')) {
+                Schema::table($tableName, function (Blueprint $table) use ($tableName) {
+                    $table->dropForeign(['outlet_id']);
+                    $table->dropColumn('outlet_id');
+                });
+            }
         }
     }
 };

@@ -61,7 +61,7 @@ class AdminController extends Controller
             $activities->push((object)[
                 'user' => $sale->user->name,
                 'action' => 'Made a sale',
-                'details' => "Invoice: {$sale->invoice_no} - Amount: \${$sale->total}",
+                'details' => "Invoice: {$sale->invoice_no} - Amount: Ksh{$sale->total}",
                 'created_at' => $sale->created_at
             ]);
         }

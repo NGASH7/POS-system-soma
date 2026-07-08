@@ -9,8 +9,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\CustomerCreditController;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ReturnController;
+use App\Http\Controllers\ExpenseController;
+use Illuminate\Support\Facades\Route;
 
 // Custom home route that redirects based on user role
 Route::get('/', function () {
@@ -18,10 +19,8 @@ Route::get('/', function () {
         if (auth()->user()->isAdmin()) {
             return redirect()->route('admin.dashboard');
         }
-
         return redirect()->route('dashboard');
     }
-
     return redirect()->route('login');
 });
 
@@ -51,6 +50,7 @@ Route::post('/mpesa/callback/stk', [POSController::class, 'mpesaCallback'])->nam
 // Airtel Money Callback Route (must be accessible publicly)
 Route::post('/airtel/callback', [POSController::class, 'airtelCallback'])->name('airtel.callback');
 
+// ========== AUTH PROTECTED ROUTES ==========
 Route::middleware('auth')->group(function () {
     // Profile Routes
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -67,9 +67,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/pos/receipt/{id}', [POSController::class, 'receipt'])->name('pos.receipt');
     Route::get('/pos/print/{id}', [POSController::class, 'printReceipt'])->name('pos.print');
     Route::get('/pos/search-product', [POSController::class, 'searchProduct'])->name('pos.search');
-    Route::get('/pos/print/{id}', [POSController::class, 'printReceipt'])->name('pos.print');
 
-    // // ========== Return/Exchange Routes ==========
+    // ========== Return/Exchange Routes ==========
     Route::get('/returns', [ReturnController::class, 'index'])->name('returns.index');
     Route::get('/returns/create', [ReturnController::class, 'create'])->name('returns.create');
     Route::post('/returns', [ReturnController::class, 'store'])->name('returns.store');
@@ -80,11 +79,14 @@ Route::middleware('auth')->group(function () {
     Route::delete('/returns/{id}', [ReturnController::class, 'destroy'])->name('returns.destroy');
     Route::get('/returns/{id}/print', [ReturnController::class, 'printReturn'])->name('returns.print');
 
-    // // ========== Transaction status routes ==========
+    // ========== Transaction status routes ==========
     Route::get('/transaction/{id}/status', [POSController::class, 'checkTransactionStatus'])->name('transaction.status');
     Route::post('/transaction/{id}/process', [POSController::class, 'processMobilePayment'])->name('transaction.process');
 
     // ========== Product Management Routes ==========
+    Route::get('/products/search', [ProductController::class, 'search'])->name('products.search');
+    Route::get('/products/get/{id}', [ProductController::class, 'getProduct'])->name('products.get');
+    Route::post('/products/add-stock', [ProductController::class, 'addStock'])->name('products.add-stock');
     Route::get('/products/import/form', [ProductController::class, 'importForm'])->name('products.import.form');
     Route::post('/products/import', [ProductController::class, 'import'])->name('products.import');
     Route::get('/products/export', [ProductController::class, 'export'])->name('products.export');
@@ -97,21 +99,17 @@ Route::middleware('auth')->group(function () {
     Route::resource('customers', \App\Http\Controllers\CustomerController::class);
     Route::post('/customers/ajax', [\App\Http\Controllers\CustomerController::class, 'storeAjax'])->name('customers.storeAjax');
 
-    // // ========== Customer Credit Routes ==========
+    // ========== Customer Credit Routes ==========
     Route::resource('credits', CustomerCreditController::class);
     Route::post('/credits/{credit}/payment', [CustomerCreditController::class, 'payment'])->name('credits.payment');
     Route::get('/credits/customer/{customerId}', [CustomerCreditController::class, 'getCustomerCredits'])->name('credits.customer');
     Route::get('/credits/customer-summary/{customerId}', [CustomerCreditController::class, 'customerSummary'])->name('credits.customer-summary');
 
-    // // ========== Outlet Switcher Route ==========
+    // ========== Outlet Switcher Route ==========
     Route::post('/admin/outlet/switch', [\App\Http\Controllers\OutletSwitcherController::class, 'switch'])->name('admin.outlet.switch');
 
     // ========== Stub Routes for Upcoming Features ==========
-    
-    // Register
     Route::get('/daily-register', function() { return 'Register view coming soon'; })->name('daily-register.index');
-
-    // Sales (Additional)
     Route::get('/sales/all', function() { return 'All Sales view coming soon'; })->name('sales.index');
     Route::get('/sales/pos-list', function() { return 'List POS view coming soon'; })->name('sales.pos-list');
     Route::get('/sales/mpesa-transactions', function() { return 'M-Pesa Transactions view coming soon'; })->name('sales.mpesa-transactions');
@@ -120,37 +118,37 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales/quotations/create', function() { return 'Add Quotation view coming soon'; })->name('sales.quotations.create');
     Route::get('/sales/discounts', function() { return 'Discounts view coming soon'; })->name('sales.discounts');
     Route::get('/sales/import', function() { return 'Import Sale view coming soon'; })->name('sales.import');
-
-    // Purchases
     Route::get('/purchases', function() { return 'List Purchases view coming soon'; })->name('purchases.index');
     Route::get('/purchases/create', function() { return 'Add Purchase view coming soon'; })->name('purchases.create');
     Route::get('/purchases/returns', function() { return 'List Purchase Returns view coming soon'; })->name('purchases.returns');
-
-    // Products (Additional)
     Route::get('/products/import-assigned', function() { return 'Import Assigned Products view coming soon'; })->name('products.import-assigned');
     Route::get('/products/stock-breaking', function() { return 'Stock Breaking view coming soon'; })->name('products.stock-breaking');
     Route::get('/products/price-groups', function() { return 'Selling Price Groups view coming soon'; })->name('products.price-groups');
     Route::get('/products/units', function() { return 'Units view coming soon'; })->name('products.units');
     Route::get('/products/brands', function() { return 'Brands view coming soon'; })->name('products.brands');
     Route::get('/products/warranties', function() { return 'Warranties view coming soon'; })->name('products.warranties');
-
-    // Stock Adjustment & Transfer
     Route::get('/stock-adjustments', function() { return 'List Stock Adjustments view coming soon'; })->name('stock-adjustments.index');
     Route::get('/stock-adjustments/create', function() { return 'Add Stock Adjustment view coming soon'; })->name('stock-adjustments.create');
     Route::get('/stock-transfers', function() { return 'Stock Transfers view coming soon'; })->name('stock-transfers.index');
 
-    // Expenses
-    Route::get('/expenses', function() { return 'List Expenses view coming soon'; })->name('expenses.index');
-    Route::get('/expenses/create', function() { return 'Add Expense view coming soon'; })->name('expenses.create');
-    Route::get('/expenses/categories', function() { return 'Expense Categories view coming soon'; })->name('expenses.categories');
+    // ========== Expense Routes ==========
+    Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+    Route::get('/expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
+    Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    Route::get('/expenses/{expense}', [ExpenseController::class, 'show'])->name('expenses.show');
+    Route::get('/expenses/{expense}/edit', [ExpenseController::class, 'edit'])->name('expenses.edit');
+    Route::put('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+    Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
+    Route::post('/expenses/{expense}/reject', [ExpenseController::class, 'reject'])->name('expenses.reject');
 
-    // Reports (Additional)
-    Route::get('/reports/product-sell', function() { return 'Product Sell Report coming soon'; })->name('reports.product-sell');
-    Route::get('/reports/sell-payment', function() { return 'Sell Payment Report coming soon'; })->name('reports.sell-payment');
-    Route::get('/reports/purchase-sale', function() { return 'Purchase and Sale Report coming soon'; })->name('reports.purchase-sale');
-    Route::get('/reports/items', function() { return 'Items Report coming soon'; })->name('reports.items');
-    Route::get('/reports/stock', function() { return 'Stock Report coming soon'; })->name('reports.stock');
-    
+    // ========== Expense Category Routes ==========
+    Route::get('/expenses/categories', [ExpenseController::class, 'categories'])->name('expenses.categories');
+    Route::get('/expenses/categories/{category}/edit', [ExpenseController::class, 'editCategory'])->name('expenses.categories.edit');
+    Route::post('/expenses/categories', [ExpenseController::class, 'storeCategory'])->name('expenses.categories.store');
+    Route::put('/expenses/categories/{category}', [ExpenseController::class, 'updateCategory'])->name('expenses.categories.update');
+    Route::delete('/expenses/categories/{category}', [ExpenseController::class, 'deleteCategory'])->name('expenses.categories.delete');
+
     // ========== Reports Routes ==========
     Route::get('/reports/sales', [DashboardController::class, 'salesReport'])->name('reports.sales');
     Route::get('/reports/inventory', [DashboardController::class, 'inventoryReport'])->name('reports.inventory');
@@ -162,6 +160,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports/export/profit-loss', [ReportController::class, 'exportProfitLoss'])->name('reports.export.profit-loss');
     Route::get('/reports/export/tax', [ReportController::class, 'exportTaxReport'])->name('reports.export.tax');
     Route::get('/reports/export-pdf/{type}', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+// ========== Additional Reports Routes ==========
+Route::get('/reports/product-sell', function() {
+    return view('reports.product-sell');
+})->name('reports.product-sell');
+
+Route::get('/reports/sell-payment', function() {
+    return view('reports.sell-payment');
+})->name('reports.sell-payment');
+
+Route::get('/reports/purchase-sale', function() {
+    return view('reports.purchase-sale');
+})->name('reports.purchase-sale');
+
+Route::get('/reports/items', function() {
+    return view('reports.items');
+})->name('reports.items');
+
+Route::get('/reports/stock', function() {
+    return view('reports.stock');
+})->name('reports.stock');
 
     // ========== User Management Routes (Admin Only) ==========
     Route::middleware(['admin'])->group(function () {

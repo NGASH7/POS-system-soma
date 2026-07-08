@@ -26,6 +26,27 @@ class ProductController extends Controller
     
     public function store(Request $request)
     {
+        // Check if we're updating an existing product (adding stock)
+        if ($request->has('existing_product_id') && !empty($request->existing_product_id)) {
+            $product = Product::findOrFail($request->existing_product_id);
+            
+            $validated = $request->validate([
+                'stock_quantity' => 'required|integer|min:0',
+                'low_stock_threshold' => 'nullable|integer|min:0',
+            ]);
+            
+            // Add stock to existing product
+            $newStock = $product->stock_quantity + $validated['stock_quantity'];
+            $product->update([
+                'stock_quantity' => $newStock,
+                'low_stock_threshold' => $validated['low_stock_threshold'] ?? $product->low_stock_threshold
+            ]);
+            
+            return redirect()->route('products.index')
+                ->with('success', "Added {$validated['stock_quantity']} items to {$product->name}. New stock: {$newStock}");
+        }
+        
+        // Create new product
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'sku' => 'required|string|unique:products',
@@ -54,6 +75,63 @@ class ProductController extends Controller
     {
         $categories = Category::orderBy('name')->get();
         return view('products.edit', compact('product', 'categories'));
+    }
+    
+    /**
+     * Search for products (for AJAX search)
+     */
+    public function search(Request $request)
+    {
+        $search = $request->get('q');
+        
+        if (empty($search) || strlen($search) < 2) {
+            return response()->json([]);
+        }
+        
+        $products = Product::with('category')
+            ->where('is_active', true)
+            ->where(function($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                      ->orWhere('sku', 'like', "%{$search}%")
+                      ->orWhere('barcode', 'like', "%{$search}%");
+            })
+            ->limit(10)
+            ->get();
+        
+        return response()->json($products);
+    }
+    
+    /**
+     * Get product details for AJAX (for quick stock addition)
+     */
+    public function getProduct($id)
+    {
+        $product = Product::with('category')->findOrFail($id);
+        return response()->json($product);
+    }
+    
+    /**
+     * Add stock to existing product (standalone endpoint)
+     */
+    public function addStock(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+        
+        $product = Product::findOrFail($request->product_id);
+        $newStock = $product->stock_quantity + $request->quantity;
+        
+        $product->update([
+            'stock_quantity' => $newStock
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Added {$request->quantity} items to {$product->name}",
+            'new_stock' => $newStock
+        ]);
     }
     
     public function update(Request $request, Product $product)
