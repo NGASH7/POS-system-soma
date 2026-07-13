@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Imports\ProductsImport;
 use App\Exports\ProductsExport;
@@ -26,37 +27,42 @@ class ProductController extends Controller
     
     public function store(Request $request)
     {
-        // Check if we're updating an existing product (adding stock)
-        if ($request->has('existing_product_id') && !empty($request->existing_product_id)) {
-            $product = Product::findOrFail($request->existing_product_id);
-            
+        if ($request->filled('existing_product_id')) {
             $validated = $request->validate([
-                'stock_quantity' => 'required|integer|min:0',
+                'existing_product_id' => 'required|exists:products,id',
+                'stock_quantity' => 'required|integer|min:1',
                 'low_stock_threshold' => 'nullable|integer|min:0',
             ]);
-            
-            // Add stock to existing product
-            $newStock = $product->stock_quantity + $validated['stock_quantity'];
+
+            $product = Product::findOrFail($validated['existing_product_id']);
+            $added = (int) $validated['stock_quantity'];
+            $newStock = $product->stock_quantity + $added;
+
             $product->update([
                 'stock_quantity' => $newStock,
-                'low_stock_threshold' => $validated['low_stock_threshold'] ?? $product->low_stock_threshold
+                'low_stock_threshold' => $validated['low_stock_threshold'] ?? $product->low_stock_threshold,
             ]);
-            
+
             return redirect()->route('products.index')
-                ->with('success', "Added {$validated['stock_quantity']} items to {$product->name}. New stock: {$newStock}");
+                ->with('success', "Added {$added} to {$product->name}. Stock is now {$newStock}.");
         }
-        
-        // Create new product
+
+        $outletId = session('active_outlet_id', auth()->user()->outlet_id ?? 1);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products',
-            'barcode' => 'nullable|string|unique:products',
+            'sku' => [
+                'required',
+                'string',
+                Rule::unique('products')->where(fn ($query) => $query->where('outlet_id', $outletId)),
+            ],
+            'barcode' => 'nullable|string|unique:products,barcode',
             'price' => 'required|numeric|min:0',
             'cost' => 'required|numeric|min:0',
             'stock_quantity' => 'required|integer|min:0',
             'low_stock_threshold' => 'required|integer|min:0',
             'category_id' => 'nullable|exists:categories,id',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048'
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
         
         if ($request->hasFile('image')) {

@@ -10,9 +10,11 @@
                 <p class="text-sm text-slate-500 mt-1">Track and manage business spending</p>
             </div>
             <div class="flex items-center gap-2">
+                @if(auth()->user()->role === 'admin')
                 <a href="{{ route('expenses.categories') }}" class="soma-btn-secondary">
                     Categories
                 </a>
+                @endif
                 <a href="{{ route('expenses.create') }}" class="soma-btn-primary">
                     <i class="fas fa-plus text-xs"></i> Add Expense
                 </a>
@@ -129,22 +131,40 @@
                                     <a href="{{ route('expenses.show', $expense) }}" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="View">
                                         <i class="fas fa-eye text-sm"></i>
                                     </a>
-                                    <a href="{{ route('expenses.edit', $expense) }}" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Edit">
-                                        <i class="fas fa-pen text-sm"></i>
-                                    </a>
-                                    @if($expense->status === 'pending')
-                                        <form method="POST" action="{{ route('expenses.approve', $expense) }}" class="inline">
+
+                                    @if(auth()->user()->role === 'admin')
+                                        {{-- Admin: edit all expenses --}}
+                                        <a href="{{ route('expenses.edit', $expense) }}" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Edit">
+                                            <i class="fas fa-pen text-sm"></i>
+                                        </a>
+                                        @if($expense->status === 'pending')
+                                            <form method="POST" action="{{ route('expenses.approve', $expense) }}" class="inline">
+                                                @csrf
+                                                <button type="submit" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition" title="Approve">
+                                                    <i class="fas fa-check text-sm"></i>
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('expenses.reject', $expense) }}" class="inline">
+                                                @csrf
+                                                <button type="submit" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Reject">
+                                                    <i class="fas fa-times text-sm"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                        <form method="POST" action="{{ route('expenses.destroy', $expense) }}" class="inline" onsubmit="return confirm('Delete this expense?')">
                                             @csrf
-                                            <button type="submit" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition" title="Approve">
-                                                <i class="fas fa-check text-sm"></i>
+                                            @method('DELETE')
+                                            <button type="submit" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Delete">
+                                                <i class="fas fa-trash text-sm"></i>
                                             </button>
                                         </form>
-                                        <form method="POST" action="{{ route('expenses.reject', $expense) }}" class="inline">
-                                            @csrf
-                                            <button type="submit" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Reject">
-                                                <i class="fas fa-times text-sm"></i>
-                                            </button>
-                                        </form>
+                                    @else
+                                        {{-- Employee: can only edit their own pending expenses --}}
+                                        @if($expense->user_id === auth()->id() && $expense->status === 'pending')
+                                            <a href="{{ route('expenses.edit', $expense) }}" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition" title="Edit">
+                                                <i class="fas fa-pen text-sm"></i>
+                                            </a>
+                                        @endif
                                     @endif
                                 </div>
                             </td>

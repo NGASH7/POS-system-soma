@@ -1,69 +1,79 @@
 @extends('layouts.app')
 
-@section('header_title', 'Sales Report')
-
 @section('content')
-<x-soma-page title="Sales Report" subtitle="View and filter completed transactions">
-    <x-slot:actions>
-        <button type="button" onclick="window.print()" class="soma-btn-primary">
-            <i class="fas fa-print"></i> Print Report
-        </button>
-    </x-slot:actions>
-
-    <div class="soma-card p-6">
-            <form method="GET" class="mb-6 flex flex-wrap gap-4">
+<div class="py-12">
+    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div class="flex justify-between items-center mb-6">
                 <div>
-                    <label class="mb-1 block text-sm font-semibold text-slate-700">Start Date</label>
-                    <input type="date" name="start_date" value="{{ $startDate->format('Y-m-d') }}" class="soma-input">
+                    <h2 class="text-2xl font-bold text-gray-800">
+                        <i class="fas fa-file-invoice text-blue-600 mr-2"></i>Sales Report
+                    </h2>
+                    <p class="text-sm text-gray-500 mt-1">View all sales transactions</p>
+                </div>
+                <button onclick="window.print()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-print mr-2"></i>Print Report
+                </button>
+            </div>
+            
+            <!-- Date Filter -->
+            <form method="GET" class="mb-6 flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ $startDate->format('Y-m-d') }}" class="border border-gray-300 rounded-lg px-3 py-2">
                 </div>
                 <div>
-                    <label class="mb-1 block text-sm font-semibold text-slate-700">End Date</label>
-                    <input type="date" name="end_date" value="{{ $endDate->format('Y-m-d') }}" class="soma-input">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ $endDate->format('Y-m-d') }}" class="border border-gray-300 rounded-lg px-3 py-2">
                 </div>
-                <div class="flex items-end">
-                    <button type="submit" class="soma-btn-primary">Filter</button>
+                <div>
+                    <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
+                        <i class="fas fa-filter mr-2"></i>Filter
+                    </button>
                 </div>
             </form>
-
-            <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div class="rounded-2xl border border-slate-200 bg-blue-50 p-4">
-                    <div class="mb-1 text-sm text-slate-500">Total Sales</div>
-                    <div class="text-2xl font-bold leading-tight text-blue-700">KES {{ number_format($summary['total_sales'], 2) }}</div>
+            
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-indigo-50 p-4 rounded-lg">
+                    <div class="text-sm text-gray-600">Total Sales</div>
+                    <div class="text-2xl font-bold text-indigo-600">KES {{ number_format($summary['total_sales'], 2) }}</div>
                 </div>
-                <div class="rounded-2xl border border-slate-200 bg-emerald-50 p-4">
-                    <div class="mb-1 text-sm text-slate-500">Transactions</div>
-                    <div class="text-2xl font-bold leading-tight text-emerald-600">{{ number_format($summary['total_transactions']) }}</div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <div class="text-sm text-gray-600">Transactions</div>
+                    <div class="text-2xl font-bold text-green-600">{{ number_format($summary['total_transactions']) }}</div>
                 </div>
-                <div class="rounded-2xl border border-slate-200 bg-sky-50 p-4">
-                    <div class="mb-1 text-sm text-slate-500">Average Sale</div>
-                    <div class="text-2xl font-bold leading-tight text-sky-600">KES {{ number_format($summary['average_sale'], 2) }}</div>
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <div class="text-sm text-gray-600">Average Sale</div>
+                    <div class="text-2xl font-bold text-blue-600">KES {{ number_format($summary['average_sale'], 2) }}</div>
                 </div>
             </div>
-
-            <div class="overflow-x-auto rounded-xl border border-slate-200">
-                <table class="soma-table w-full">
-                    <thead>
+            
+            <!-- Sales Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
                         <tr>
-                            <th>Invoice</th>
-                            <th>Date</th>
-                            <th>Cashier</th>
-                            <th>Customer</th>
-                            <th class="text-right">Total</th>
-                            <th>Payment</th>
-                            <th class="text-center">Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cashier</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="divide-y divide-gray-200">
                         @foreach($sales as $sale)
                         <tr>
-                            <td class="font-semibold text-slate-950">{{ $sale->invoice_no }}</td>
-                            <td>{{ $sale->created_at->format('d/m/Y H:i') }}</td>
-                            <td>{{ $sale->user->name }}</td>
-                            <td>{{ $sale->customer->name ?? 'Walk-in' }}</td>
-                            <td class="text-right font-semibold">KES {{ number_format($sale->total, 2) }}</td>
-                            <td>{{ ucfirst(str_replace('_', ' ', $sale->payment_method)) }}</td>
-                            <td class="text-center">
-                                <button type="button" onclick="viewReceipt({{ $sale->id }})" class="text-sm font-semibold text-blue-700 hover:text-blue-800">
+                            <td class="px-4 py-3 font-medium text-gray-900">{{ $sale->invoice_no }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ $sale->created_at->format('d/m/Y H:i') }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ $sale->user->name ?? 'N/A' }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ $sale->customer->name ?? 'Walk-in' }}</td>
+                            <td class="px-4 py-3 text-right font-semibold">KES {{ number_format($sale->total, 2) }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-600">{{ ucfirst(str_replace('_', ' ', $sale->payment_method)) }}</td>
+                            <td class="px-4 py-3 text-center">
+                                <button type="button" onclick="viewReceipt({{ $sale->id }})" class="text-sm font-semibold text-blue-600 hover:text-blue-800">
                                     <i class="fas fa-receipt mr-1"></i> View
                                 </button>
                             </td>
@@ -72,118 +82,17 @@
                     </tbody>
                 </table>
             </div>
-
+            
             <div class="mt-4">
                 {{ $sales->links() }}
             </div>
-    </div>
-</x-soma-page>
-
-<!-- Receipt Modal -->
-<div id="receiptModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4">
-    <div class="flex max-h-[95vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
-            <h3 class="text-lg font-bold text-slate-950">Transaction Receipt</h3>
-            <button onclick="closeReceiptModal()" class="text-slate-400 transition hover:text-slate-600">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-        <div id="receiptContent" class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-6">
-            <div class="text-center py-8">
-                <i class="fas fa-spinner fa-spin text-blue-700 text-3xl"></i>
-                <p class="mt-2 text-slate-500">Loading receipt...</p>
-            </div>
-        </div>
-        <div class="flex shrink-0 gap-3 border-t border-slate-200 px-6 py-4">
-            <button onclick="printReceipt()" class="flex-1 rounded-xl bg-slate-700 py-2 font-semibold text-white transition hover:bg-slate-800">
-                <i class="fas fa-print mr-2"></i>Print Receipt
-            </button>
-            <button onclick="closeReceiptModal()" class="flex-1 bg-blue-700 text-white py-2 rounded-xl hover:bg-blue-800 transition font-medium">
-                <i class="fas fa-times mr-2"></i>Close
-            </button>
         </div>
     </div>
 </div>
 
 <script>
-    let currentReceiptSaleId = null;
-
-    function viewReceipt(saleId) {
-        currentReceiptSaleId = saleId;
-        const modal = document.getElementById('receiptModal');
-        const content = document.getElementById('receiptContent');
-        
-        // Show loading
-        content.innerHTML = `
-            <div class="text-center py-8">
-                <i class="fas fa-spinner fa-spin text-blue-700 text-3xl"></i>
-                <p class="mt-2 text-slate-500">Loading receipt...</p>
-            </div>
-        `;
-        
-        // Show modal
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.body.style.overflow = 'hidden';
-        
-        // Load receipt
-        fetch(`/pos/print/${saleId}?embed=1`)
-            .then(response => response.text())
-            .then(html => {
-                // Extract only the receipt content from the print view
-                // The print view already has its own styling, we just need the content
-                content.innerHTML = html;
-            })
-            .catch(error => {
-                content.innerHTML = `
-                    <div class="text-center py-8">
-                        <i class="fas fa-exclamation-circle text-red-500 text-3xl"></i>
-                        <p class="mt-2 text-red-600">Failed to load receipt</p>
-                        <button onclick="viewReceipt(${saleId})" class="mt-2 text-blue-700 hover:underline">Try Again</button>
-                    </div>
-                `;
-                console.error('Error loading receipt:', error);
-            });
-    }
-    
-    function closeReceiptModal() {
-        const modal = document.getElementById('receiptModal');
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-    
-    function printReceipt() {
-        if (!currentReceiptSaleId) {
-            return;
-        }
-
-        const printWindow = window.open(
-            `/pos/print/${currentReceiptSaleId}`,
-            'ReceiptPrint',
-            'width=480,height=720,scrollbars=yes,resizable=yes,menubar=no,toolbar=no'
-        );
-
-        if (!printWindow) {
-            alert('Please allow popups to print the receipt.');
-            return;
-        }
-
-        printWindow.focus();
-    }
-    
-    // Close modal on background click
-    document.getElementById('receiptModal').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeReceiptModal();
-        }
-    });
-    
-    // Close on Escape key
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeReceiptModal();
-        }
-    });
+function viewReceipt(saleId) {
+    window.open('{{ url("/pos/print") }}/' + saleId, '_blank', 'width=400,height=600,scrollbars=yes');
+}
 </script>
 @endsection

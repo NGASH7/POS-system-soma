@@ -2,15 +2,19 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerCreditController;
+use App\Http\Controllers\DailyRegisterController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\OutletSwitcherController;
 use App\Http\Controllers\POSController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\CustomerCreditController;
 use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 // Custom home route that redirects based on user role
@@ -19,8 +23,10 @@ Route::get('/', function () {
         if (auth()->user()->isAdmin()) {
             return redirect()->route('admin.dashboard');
         }
+
         return redirect()->route('dashboard');
     }
+
     return redirect()->route('login');
 });
 
@@ -68,6 +74,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/pos/print/{id}', [POSController::class, 'printReceipt'])->name('pos.print');
     Route::get('/pos/search-product', [POSController::class, 'searchProduct'])->name('pos.search');
 
+    // Daily Register Routes
+    Route::middleware('auth')->group(function () {
+        Route::get('/daily-register', [DailyRegisterController::class, 'index'])->name('daily-register.index');
+        Route::post('/daily-register/open', [DailyRegisterController::class, 'open'])->name('daily-register.open');
+        Route::post('/daily-register/close', [DailyRegisterController::class, 'close'])->name('daily-register.close');
+        Route::get('/daily-register/print/{date?}', [DailyRegisterController::class, 'print'])->name('daily-register.print');
+    });
+
     // ========== Return/Exchange Routes ==========
     Route::get('/returns', [ReturnController::class, 'index'])->name('returns.index');
     Route::get('/returns/create', [ReturnController::class, 'create'])->name('returns.create');
@@ -96,8 +110,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoryController::class);
 
     // ========== Customer management routes ==========
-    Route::resource('customers', \App\Http\Controllers\CustomerController::class);
-    Route::post('/customers/ajax', [\App\Http\Controllers\CustomerController::class, 'storeAjax'])->name('customers.storeAjax');
+    Route::resource('customers', CustomerController::class);
+    Route::post('/customers/ajax', [CustomerController::class, 'storeAjax'])->name('customers.storeAjax');
 
     // ========== Customer Credit Routes ==========
     Route::resource('credits', CustomerCreditController::class);
@@ -106,29 +120,65 @@ Route::middleware('auth')->group(function () {
     Route::get('/credits/customer-summary/{customerId}', [CustomerCreditController::class, 'customerSummary'])->name('credits.customer-summary');
 
     // ========== Outlet Switcher Route ==========
-    Route::post('/admin/outlet/switch', [\App\Http\Controllers\OutletSwitcherController::class, 'switch'])->name('admin.outlet.switch');
+    Route::post('/admin/outlet/switch', [OutletSwitcherController::class, 'switch'])->name('admin.outlet.switch');
 
     // ========== Stub Routes for Upcoming Features ==========
-    Route::get('/daily-register', function() { return 'Register view coming soon'; })->name('daily-register.index');
-    Route::get('/sales/all', function() { return 'All Sales view coming soon'; })->name('sales.index');
-    Route::get('/sales/pos-list', function() { return 'List POS view coming soon'; })->name('sales.pos-list');
-    Route::get('/sales/mpesa-transactions', function() { return 'M-Pesa Transactions view coming soon'; })->name('sales.mpesa-transactions');
-    Route::get('/sales/drafts/create', function() { return 'Add Draft view coming soon'; })->name('sales.drafts.create');
-    Route::get('/sales/quotations', function() { return 'List Quotations view coming soon'; })->name('sales.quotations.index');
-    Route::get('/sales/quotations/create', function() { return 'Add Quotation view coming soon'; })->name('sales.quotations.create');
-    Route::get('/sales/discounts', function() { return 'Discounts view coming soon'; })->name('sales.discounts');
-    Route::get('/sales/import', function() { return 'Import Sale view coming soon'; })->name('sales.import');
-    Route::get('/purchases', function() { return 'List Purchases view coming soon'; })->name('purchases.index');
-    Route::get('/purchases/create', function() { return 'Add Purchase view coming soon'; })->name('purchases.create');
-    Route::get('/purchases/returns', function() { return 'List Purchase Returns view coming soon'; })->name('purchases.returns');
-    Route::get('/products/import-assigned', function() { return 'Import Assigned Products view coming soon'; })->name('products.import-assigned');
-    Route::get('/products/stock-breaking', function() { return 'Stock Breaking view coming soon'; })->name('products.stock-breaking');
-    Route::get('/products/price-groups', function() { return 'Selling Price Groups view coming soon'; })->name('products.price-groups');
-    Route::get('/products/units', function() { return 'Units view coming soon'; })->name('products.units');
-    Route::get('/products/brands', function() { return 'Brands view coming soon'; })->name('products.brands');
-    Route::get('/products/warranties', function() { return 'Warranties view coming soon'; })->name('products.warranties');
-    Route::get('/stock-adjustments', function() { return 'List Stock Adjustments view coming soon'; })->name('stock-adjustments.index');
-    Route::get('/stock-adjustments/create', function() { return 'Add Stock Adjustment view coming soon'; })->name('stock-adjustments.create');
+    Route::get('/daily-register', [DailyRegisterController::class, 'index'])->name('daily-register.index');
+    Route::post('/daily-register/open', [DailyRegisterController::class, 'open'])->name('daily-register.open');
+    Route::post('/daily-register/close', [DailyRegisterController::class, 'close'])->name('daily-register.close');
+    Route::get('/sales/all', [DashboardController::class, 'salesReport'])->name('reports.sales');
+    Route::get('/sales/pos-list', function () {
+        return 'List POS view coming soon';
+    })->name('sales.pos-list');
+    Route::get('/sales/mpesa-transactions', [ReportController::class, 'mpesaTransactions'])->name('sales.mpesa-transactions');
+    Route::get('/sales/drafts/create', function () {
+        return 'Add Draft view coming soon';
+    })->name('sales.drafts.create');
+    Route::get('/sales/quotations', function () {
+        return 'List Quotations view coming soon';
+    })->name('sales.quotations.index');
+    Route::get('/sales/quotations/create', function () {
+        return 'Add Quotation view coming soon';
+    })->name('sales.quotations.create');
+    Route::get('/sales/discounts', function () {
+        return 'Discounts view coming soon';
+    })->name('sales.discounts');
+    Route::get('/sales/import', function () {
+        return 'Import Sale view coming soon';
+    })->name('sales.import');
+    Route::get('/purchases', function () {
+        return 'List Purchases view coming soon';
+    })->name('purchases.index');
+    Route::get('/purchases/create', function () {
+        return 'Add Purchase view coming soon';
+    })->name('purchases.create');
+    Route::get('/purchases/returns', function () {
+        return 'List Purchase Returns view coming soon';
+    })->name('purchases.returns');
+    Route::get('/products/import-assigned', function () {
+        return 'Import Assigned Products view coming soon';
+    })->name('products.import-assigned');
+    Route::get('/products/stock-breaking', function () {
+        return 'Stock Breaking view coming soon';
+    })->name('products.stock-breaking');
+    Route::get('/products/price-groups', function () {
+        return 'Selling Price Groups view coming soon';
+    })->name('products.price-groups');
+    Route::get('/products/units', function () {
+        return 'Units view coming soon';
+    })->name('products.units');
+    Route::get('/products/brands', function () {
+        return 'Brands view coming soon';
+    })->name('products.brands');
+    Route::get('/products/warranties', function () {
+        return 'Warranties view coming soon';
+    })->name('products.warranties');
+    Route::get('/stock-adjustments', function () {
+        return 'List Stock Adjustments view coming soon';
+    })->name('stock-adjustments.index');
+    Route::get('/stock-adjustments/create', function () {
+        return 'Add Stock Adjustment view coming soon';
+    })->name('stock-adjustments.create');
     Route::get('/stock-transfers', [StockTransferController::class, 'index'])->name('stock-transfers.index');
     Route::get('/stock-transfers/create', [StockTransferController::class, 'create'])->name('stock-transfers.create');
     Route::post('/stock-transfers', [StockTransferController::class, 'store'])->name('stock-transfers.store');
@@ -165,26 +215,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/reports/export/profit-loss', [ReportController::class, 'exportProfitLoss'])->name('reports.export.profit-loss');
     Route::get('/reports/export/tax', [ReportController::class, 'exportTaxReport'])->name('reports.export.tax');
     Route::get('/reports/export-pdf/{type}', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
-// ========== Additional Reports Routes ==========
-Route::get('/reports/product-sell', function() {
-    return view('reports.product-sell');
-})->name('reports.product-sell');
+    // ========== Additional Reports Routes ==========
+    Route::get('/reports/product-sell', function () {
+        return view('reports.product-sell');
+    })->name('reports.product-sell');
 
-Route::get('/reports/sell-payment', function() {
-    return view('reports.sell-payment');
-})->name('reports.sell-payment');
+    Route::get('/reports/sell-payment', function () {
+        return view('reports.sell-payment');
+    })->name('reports.sell-payment');
 
-Route::get('/reports/purchase-sale', function() {
-    return view('reports.purchase-sale');
-})->name('reports.purchase-sale');
+    Route::get('/reports/purchase-sale', function () {
+        return view('reports.purchase-sale');
+    })->name('reports.purchase-sale');
 
-Route::get('/reports/items', function() {
-    return view('reports.items');
-})->name('reports.items');
+    Route::get('/reports/items', function () {
+        return view('reports.items');
+    })->name('reports.items');
 
-Route::get('/reports/stock', function() {
-    return view('reports.stock');
-})->name('reports.stock');
+    Route::get('/reports/stock', function () {
+        return view('reports.stock');
+    })->name('reports.stock');
 
     // ========== User Management Routes (Admin Only) ==========
     Route::middleware(['admin'])->group(function () {

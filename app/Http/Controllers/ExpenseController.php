@@ -84,23 +84,54 @@ class ExpenseController extends Controller
 
     public function edit(Expense $expense)
     {
+        // Employees can only edit their own pending expenses
+        if (Auth::user()->role !== 'admin') {
+            if ($expense->user_id !== Auth::id()) {
+                abort(403, 'You can only edit your own expenses.');
+            }
+            if ($expense->status !== 'pending') {
+                abort(403, 'You cannot edit an expense that has already been reviewed.');
+            }
+        }
+
         $categories = ExpenseCategory::where('is_active', true)->get();
         return view('expenses.edit', compact('expense', 'categories'));
     }
 
     public function update(Request $request, Expense $expense)
     {
-        $validated = $request->validate([
-            'category_id' => 'required|exists:expense_categories,id',
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'amount' => 'required|numeric|min:0',
-            'expense_date' => 'required|date',
-            'payment_method' => 'required|in:cash,card,mobile_money,bank_transfer',
-            'vendor' => 'nullable|string|max:255',
+        // Employees can only edit their own pending expenses
+        if (Auth::user()->role !== 'admin') {
+            if ($expense->user_id !== Auth::id()) {
+                abort(403, 'You can only edit your own expenses.');
+            }
+            if ($expense->status !== 'pending') {
+                abort(403, 'You cannot edit an expense that has already been reviewed.');
+            }
+        }
+
+        $rules = [
+            'category_id'   => 'required|exists:expense_categories,id',
+            'title'         => 'required|string|max:255',
+            'description'   => 'nullable|string',
+            'amount'        => 'required|numeric|min:0',
+            'expense_date'  => 'required|date',
+            'payment_method'=> 'required|in:cash,card,mobile_money,bank_transfer',
+            'vendor'        => 'nullable|string|max:255',
             'receipt_image' => 'nullable|file|mimes:jpeg,png,jpg,pdf|max:5120',
-            'status' => 'required|in:pending,approved,rejected'
-        ]);
+        ];
+
+        // Only admins may change the status field
+        if (Auth::user()->role === 'admin') {
+            $rules['status'] = 'required|in:pending,approved,rejected';
+        }
+
+        $validated = $request->validate($rules);
+
+        // Employees always stay pending
+        if (Auth::user()->role !== 'admin') {
+            $validated['status'] = 'pending';
+        }
 
         if ($request->hasFile('receipt_image')) {
             if ($expense->receipt_image) {
@@ -117,6 +148,11 @@ class ExpenseController extends Controller
 
     public function destroy(Expense $expense)
     {
+        // Only admins can delete expenses
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Only administrators can delete expenses.');
+        }
+
         if ($expense->receipt_image) {
             Storage::disk('public')->delete($expense->receipt_image);
         }
@@ -128,13 +164,27 @@ class ExpenseController extends Controller
 
     public function approve(Expense $expense)
     {
-        $expense->update(['status' => 'approved']);
+        // Only admins can approve expenses
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Only administrators can approve expenses.');
+        }
+
+        $expense->update([
+            'status'      => 'approved',
+            'approved_by' => Auth::id(),
+            'approved_at' => now(),
+        ]);
         return redirect()->back()
             ->with('success', 'Expense approved successfully!');
     }
 
     public function reject(Expense $expense)
     {
+        // Only admins can reject expenses
+        if (Auth::user()->role !== 'admin') {
+            abort(403, 'Only administrators can reject expenses.');
+        }
+
         $expense->update(['status' => 'rejected']);
         return redirect()->back()
             ->with('success', 'Expense rejected successfully!');

@@ -59,6 +59,7 @@
                         </select>
                         @error('payment_method') <p class="text-rose-500 text-xs mt-1">{{ $message }}</p> @enderror
                     </div>
+                    @if(auth()->user()->role === 'admin')
                     <div>
                         <label class="block text-xs font-medium text-slate-500 mb-1.5">Status <span class="text-rose-500">*</span></label>
                         <select name="status" required class="soma-input">
@@ -70,6 +71,15 @@
                         </select>
                         @error('status') <p class="text-rose-500 text-xs mt-1">{{ $message }}</p> @enderror
                     </div>
+                    @else
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
+                        <div class="soma-input bg-slate-50 text-slate-500 cursor-not-allowed flex items-center gap-2">
+                            <i class="fas fa-clock text-amber-500 text-xs"></i>
+                            Pending — awaiting admin approval
+                        </div>
+                    </div>
+                    @endif
                     <div>
                         <label class="block text-xs font-medium text-slate-500 mb-1.5">Vendor</label>
                         <input type="text" name="vendor" value="{{ old('vendor', $expense->vendor) }}" placeholder="Optional" class="soma-input">

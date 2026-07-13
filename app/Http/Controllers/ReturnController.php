@@ -33,107 +33,135 @@ class ReturnController extends Controller
     public function create()
     {
         $customers = Customer::orderBy('name')->get();
-        $products = Product::where('is_active', true)->orderBy('name')->get();
+        $products = Product::where('is_active', true)
+            ->orderBy('name')
+            ->take(50)
+            ->get();
+        
         return view('returns.create', compact('customers', 'products'));
     }
 
     public function searchSale(Request $request)
     {
-        $search = $request->get('search');
-        
-        $sale = Sale::with(['items.product', 'customer', 'user'])
-            ->where(function($query) use ($search) {
-                $query->where('invoice_no', 'like', "%{$search}%")
-                    ->orWhereHas('customer', function($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%")
-                          ->orWhere('phone', 'like', "%{$search}%");
-                    });
-            })
-            ->where('status', 'completed')
-            ->where('is_return', false)
-            ->first();
+        try {
+            $search = $request->get('search');
+            
+            Log::info('Searching for sale:', ['search' => $search]);
+            
+            if (empty($search)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please enter a search term'
+                ]);
+            }
 
-        if (!$sale) {
+            $sale = Sale::with(['items.product', 'customer', 'user'])
+                ->where(function($query) use ($search) {
+                    $query->where('invoice_no', 'like', "%{$search}%")
+                        ->orWhereHas('customer', function($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%")
+                              ->orWhere('phone', 'like', "%{$search}%");
+                        });
+                })
+                ->where('status', 'completed')
+                ->where('is_return', false)
+                ->first();
+
+            if (!$sale) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sale not found. Please check the invoice number or customer name.'
+                ]);
+            }
+
+            // Get returnable items (items not already returned)
+            $returnedItems = ReturnModel::where('original_sale_id', $sale->id)
+                ->get()
+                ->pluck('items')
+                ->flatten()
+                ->toArray();
+
+            $items = $sale->items->map(function($item) use ($returnedItems) {
+                $alreadyReturned = in_array($item->id, $returnedItems);
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product->name,
+                    'product_id' => $item->product_id,
+                    'quantity' => $item->quantity,
+                    'price' => $item->price,
+                    'total' => $item->total,
+                    'already_returned' => $alreadyReturned,
+                    'available_quantity' => $alreadyReturned ? 0 : $item->quantity
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'sale' => $sale,
+                'items' => $items,
+                'customer' => $sale->customer ? [
+                    'id' => $sale->customer->id,
+                    'name' => $sale->customer->name,
+                    'phone' => $sale->customer->phone
+                ] : null
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Search sale error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Sale not found. Please check the invoice number or customer name.'
-            ]);
+                'message' => 'Error searching for sale: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Get returnable items (items not already returned)
-        $returnedItems = ReturnModel::where('original_sale_id', $sale->id)
-            ->get()
-            ->pluck('items')
-            ->flatten()
-            ->toArray();
-
-        $items = $sale->items->map(function($item) use ($returnedItems) {
-            $alreadyReturned = in_array($item->id, $returnedItems);
-            return [
-                'id' => $item->id,
-                'product_name' => $item->product->name,
-                'product_id' => $item->product_id,
-                'quantity' => $item->quantity,
-                'price' => $item->price,
-                'total' => $item->total,
-                'already_returned' => $alreadyReturned,
-                'available_quantity' => $alreadyReturned ? 0 : $item->quantity
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'sale' => $sale,
-            'items' => $items,
-            'customer' => $sale->customer ? [
-                'id' => $sale->customer->id,
-                'name' => $sale->customer->name,
-                'phone' => $sale->customer->phone
-            ] : null
-        ]);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'original_sale_id' => 'required|exists:sales,id',
-            'return_type' => 'required|in:return,exchange',
-            'reason' => 'required|string|max:255',
-            'refund_method' => 'required|in:cash,card,credit,mobile_money',
-            'notes' => 'nullable|string',
-            'items' => 'required|array|min:1',
-            'items.*' => 'exists:sale_items,id',
-            'exchange_items' => 'nullable|array',
-            'exchange_items.*.product_id' => 'exists:products,id',
-            'exchange_items.*.quantity' => 'integer|min:1'
-        ]);
-
-        DB::beginTransaction();
-
         try {
+            $validated = $request->validate([
+                'original_sale_id' => 'required|exists:sales,id',
+                'return_type' => 'required|in:return,exchange',
+                'reason' => 'required|string|max:255',
+                'refund_method' => 'required|in:cash,card,credit,mobile_money',
+                'notes' => 'nullable|string',
+                'items' => 'required|json',
+                'exchange_items' => 'nullable|array',
+                'exchange_items.*.product_id' => 'exists:products,id',
+                'exchange_items.*.quantity' => 'integer|min:1'
+            ]);
+
+            DB::beginTransaction();
+
             $originalSale = Sale::find($validated['original_sale_id']);
+            
+            // Decode items
+            $items = json_decode($validated['items'], true);
             
             // Calculate refund amount
             $refundAmount = 0;
             $returnedItems = [];
-            foreach ($validated['items'] as $itemId) {
+            foreach ($items as $itemId) {
                 $saleItem = SaleItem::find($itemId);
-                $refundAmount += $saleItem->total;
-                $returnedItems[] = $itemId;
+                if ($saleItem) {
+                    $refundAmount += $saleItem->total;
+                    $returnedItems[] = $itemId;
+                }
             }
 
             // Handle exchange
             $exchangeItems = [];
-            if ($validated['return_type'] === 'exchange') {
-                foreach ($validated['exchange_items'] ?? [] as $item) {
+            if ($validated['return_type'] === 'exchange' && isset($validated['exchange_items'])) {
+                foreach ($validated['exchange_items'] as $item) {
                     $product = Product::find($item['product_id']);
-                    $exchangeItems[] = [
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'quantity' => $item['quantity'],
-                        'price' => $product->price,
-                        'total' => $product->price * $item['quantity']
-                    ];
+                    if ($product) {
+                        $exchangeItems[] = [
+                            'product_id' => $product->id,
+                            'product_name' => $product->name,
+                            'quantity' => $item['quantity'],
+                            'price' => $product->price,
+                            'total' => $product->price * $item['quantity']
+                        ];
+                    }
                 }
             }
 
@@ -147,17 +175,19 @@ class ReturnController extends Controller
                 'refund_method' => $validated['refund_method'],
                 'return_type' => $validated['return_type'],
                 'reason' => $validated['reason'],
-                'notes' => $validated['notes'],
+                'notes' => $validated['notes'] ?? null,
                 'status' => 'completed',
                 'items' => $returnedItems,
                 'exchange_items' => $exchangeItems
             ]);
 
-            // Update stock for returned items
-            foreach ($validated['items'] as $itemId) {
+            // Update stock for returned items (ADD back to inventory)
+            foreach ($items as $itemId) {
                 $saleItem = SaleItem::find($itemId);
-                Product::where('id', $saleItem->product_id)
-                    ->increment('stock_quantity', $saleItem->quantity);
+                if ($saleItem) {
+                    Product::where('id', $saleItem->product_id)
+                        ->increment('stock_quantity', $saleItem->quantity);
+                }
             }
 
             // If exchange, deduct stock for exchanged items
@@ -168,16 +198,16 @@ class ReturnController extends Controller
                 }
             }
 
-            // Create a return sale record
+            // CRITICAL: Create a NEGATIVE sale record for the return
             $returnSale = Sale::create([
                 'invoice_no' => $return->return_no,
                 'user_id' => Auth::id(),
                 'customer_id' => $originalSale->customer_id,
                 'terminal_id' => session()->get('terminal_id', 'TERM-01'),
-                'subtotal' => $refundAmount,
+                'subtotal' => -$refundAmount, // NEGATIVE amount
                 'discount' => 0,
                 'tax' => 0,
-                'total' => $refundAmount,
+                'total' => -$refundAmount, // NEGATIVE amount
                 'paid' => 0,
                 'change_due' => 0,
                 'payment_method' => 'return',
@@ -192,11 +222,20 @@ class ReturnController extends Controller
                 'notes' => "Return processed: {$return->return_no}"
             ]);
 
+            // Update the original sale to mark it as having returns
+            $originalSale->update([
+                'is_return' => true,
+                'return_amount' => $refundAmount,
+                'return_reason' => $validated['reason'],
+                'return_type' => $validated['return_type'],
+                'return_receipt_no' => $return->return_no
+            ]);
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Return processed successfully!',
+                'message' => 'Return processed successfully! Amount deducted from sales: KES ' . number_format($refundAmount, 2),
                 'return_no' => $return->return_no,
                 'refund_amount' => $refundAmount,
                 'return_id' => $return->id

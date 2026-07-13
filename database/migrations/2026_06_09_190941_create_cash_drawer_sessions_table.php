@@ -10,12 +10,13 @@ return new class extends Migration
     {
         Schema::create('cash_drawer_sessions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->decimal('opening_balance', 10, 2);
             $table->decimal('closing_balance', 10, 2)->nullable();
             $table->timestamp('opened_at')->useCurrent();
             $table->timestamp('closed_at')->nullable();
-            $table->string('status')->default('open');
+            $table->enum('status', ['open', 'closed'])->default('open');
+            $table->text('notes')->nullable();
             $table->timestamps();
         });
     }

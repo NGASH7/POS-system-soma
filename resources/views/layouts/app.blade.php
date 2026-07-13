@@ -894,17 +894,34 @@
                     <i class="fas fa-chevron-down chevron"></i>
                 </a>
                 <div class="nav-dropdown" id="salesDropdown">
-                    <a href="{{ route('sales.index') }}" class="nav-dropdown-item">All Sales</a>
+                    <a href="{{ route('reports.sales') }}" class="nav-dropdown-item">All Sales</a>
                     <a href="{{ route('sales.pos-list') }}" class="nav-dropdown-item">List POS</a>
                     <a href="{{ route('pos.index') }}" class="nav-dropdown-item">POS</a>
                     <a href="{{ route('sales.mpesa-transactions') }}" class="nav-dropdown-item">M-Pesa Transactions</a>
                     <a href="{{ route('sales.drafts.create') }}" class="nav-dropdown-item">Add Draft</a>
                     <a href="{{ route('sales.quotations.index') }}" class="nav-dropdown-item">List Quotation</a>
                     <a href="{{ route('sales.quotations.create') }}" class="nav-dropdown-item">Add Quotation</a>
-                    <a href="{{ route('returns.index') }}" class="nav-dropdown-item">List Return</a>
                     <a href="{{ route('sales.discounts') }}" class="nav-dropdown-item">Discounts</a>
                     <a href="{{ route('sales.import') }}" class="nav-dropdown-item">Import Sale</a>
                 </div>
+            </div>
+
+            <div class="nav-divider"></div>
+
+            <!-- RETURNS -->
+            <div class="nav-item">
+                <a href="{{ route('returns.index') }}" class="nav-link {{ request()->routeIs('returns.*') ? 'active' : '' }}">
+                    <i class="fas fa-undo-alt"></i>
+                    <span>Returns</span>
+                </a>
+            </div>
+
+            <!-- CREDITS -->
+            <div class="nav-item">
+                <a href="{{ route('credits.index') }}" class="nav-link {{ request()->routeIs('credits.*') ? 'active' : '' }}">
+                    <i class="fas fa-credit-card"></i>
+                    <span>Customer Credits</span>
+                </a>
             </div>
 
             <div class="nav-divider"></div>

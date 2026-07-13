@@ -785,6 +785,7 @@ class POSController extends Controller
             'success' => true,
             'status' => $transaction->status,
             'sale_id' => $transaction->sale_id,
+            'reference' => $transaction->reference,
             'message' => $transaction->status === 'completed' ? 'Payment completed' : 'Payment pending'
         ]);
     }
@@ -917,12 +918,80 @@ class POSController extends Controller
         ];
     }
     
+    /**
+     * Generate unique invoice number with SOMA brand and branch prefix
+     * Format: SOMA-BRANCH-YYYYMMDD-XXXX
+     * Example: SOMA-WES-20260713-0001
+     */
     private function generateInvoiceNo()
     {
-        $latest = Sale::orderBy('id', 'desc')->first();
-        $number = $latest ? intval(substr($latest->invoice_no, -4)) + 1 : 1;
+        // Get branch code
+        $branchCode = $this->getBranchCode();
+        $date = date('Ymd');
         
-        return 'SOMA-' . date('Ymd') . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
+        // Get all invoice numbers for today for this branch
+        $invoices = Sale::where('invoice_no', 'like', "SOMA-{$branchCode}-{$date}-%")
+            ->pluck('invoice_no')
+            ->toArray();
+        
+        // Extract numbers and find the max
+        $numbers = [];
+        foreach ($invoices as $inv) {
+            $parts = explode('-', $inv);
+            $lastPart = end($parts);
+            if (is_numeric($lastPart)) {
+                $numbers[] = intval($lastPart);
+            }
+        }
+        
+        $maxNumber = !empty($numbers) ? max($numbers) : 0;
+        $number = $maxNumber + 1;
+        
+        // Ensure we don't exceed 9999
+        if ($number > 9999) {
+            $number = 1;
+        }
+        
+        $invoiceNo = 'SOMA-' . $branchCode . '-' . $date . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
+        
+        // Double-check uniqueness
+        $attempts = 0;
+        while (Sale::where('invoice_no', $invoiceNo)->exists() && $attempts < 100) {
+            $number++;
+            if ($number > 9999) {
+                $number = 1;
+            }
+            $invoiceNo = 'SOMA-' . $branchCode . '-' . $date . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
+            $attempts++;
+        }
+        
+        return $invoiceNo;
+    }
+
+    /**
+     * Get the branch code for invoice generation
+     * Returns 3-letter code based on branch name
+     */
+    private function getBranchCode()
+    {
+        try {
+            $outlet = \App\Models\Outlet::find(auth()->user()->outlet_id);
+            if ($outlet) {
+                // Convert branch name to code (e.g., "Westlands Branch" -> "WES")
+                $cleanName = preg_replace('/[^a-zA-Z]/', '', $outlet->name);
+                $code = strtoupper(substr($cleanName, 0, 3));
+                
+                // If code is empty or less than 2 chars, use a fallback
+                if (strlen($code) < 2) {
+                    $code = 'OUT';
+                }
+                return $code;
+            }
+        } catch (\Exception $e) {
+            Log::warning('Could not get outlet for branch code: ' . $e->getMessage());
+        }
+        
+        return 'SOM'; // Default fallback
     }
     
     public function searchProduct(Request $request)

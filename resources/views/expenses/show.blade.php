@@ -16,7 +16,7 @@
                 <div class="flex items-center gap-2">
                     @php
                         $statusStyles = [
-                            'pending' => 'bg-amber-50 text-amber-700',
+                            'pending'  => 'bg-amber-50 text-amber-700',
                             'approved' => 'bg-emerald-50 text-emerald-700',
                             'rejected' => 'bg-rose-50 text-rose-700',
                         ];
@@ -24,7 +24,11 @@
                     <span class="text-xs font-medium px-2.5 py-1 rounded-md {{ $statusStyles[$expense->status] ?? 'bg-slate-100 text-slate-600' }}">
                         {{ ucfirst($expense->status) }}
                     </span>
-                    <a href="{{ route('expenses.edit', $expense) }}" class="soma-btn-secondary text-sm py-2">Edit</a>
+                    @if(auth()->user()->role === 'admin')
+                        <a href="{{ route('expenses.edit', $expense) }}" class="soma-btn-secondary text-sm py-2">Edit</a>
+                    @elseif($expense->user_id === auth()->id() && $expense->status === 'pending')
+                        <a href="{{ route('expenses.edit', $expense) }}" class="soma-btn-secondary text-sm py-2">Edit</a>
+                    @endif
                 </div>
             </div>
         </div>
@@ -77,14 +81,25 @@
 
         @if($expense->status === 'pending')
         <div class="flex gap-2 mt-4">
-            <form method="POST" action="{{ route('expenses.approve', $expense) }}">
-                @csrf
-                <button type="submit" class="soma-btn-primary bg-emerald-600 hover:bg-emerald-700">Approve</button>
-            </form>
-            <form method="POST" action="{{ route('expenses.reject', $expense) }}">
-                @csrf
-                <button type="submit" class="soma-btn-secondary text-rose-600 border-rose-200 hover:bg-rose-50">Reject</button>
-            </form>
+            @if(auth()->user()->role === 'admin')
+                <form method="POST" action="{{ route('expenses.approve', $expense) }}">
+                    @csrf
+                    <button type="submit" class="soma-btn-primary bg-emerald-600 hover:bg-emerald-700">
+                        <i class="fas fa-check text-xs"></i> Approve
+                    </button>
+                </form>
+                <form method="POST" action="{{ route('expenses.reject', $expense) }}">
+                    @csrf
+                    <button type="submit" class="soma-btn-secondary text-rose-600 border-rose-200 hover:bg-rose-50">
+                        <i class="fas fa-times text-xs"></i> Reject
+                    </button>
+                </form>
+            @else
+                <p class="text-sm text-amber-600 inline-flex items-center gap-1.5">
+                    <i class="fas fa-clock text-xs"></i>
+                    Awaiting admin approval
+                </p>
+            @endif
         </div>
         @endif
 

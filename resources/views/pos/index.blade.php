@@ -651,7 +651,10 @@
                     if (response.success) {
                         if (response.requires_payment) {
                             showNotification(response.message, 'info');
-                            checkTransactionStatus(response.transaction_id);
+                            if (response.reference) {
+                                $('#payment-processing').find('p.text-sm').text(`Please wait while we confirm. Ref: ${response.reference}`);
+                            }
+                            checkTransactionStatus(response.transaction_id, response.reference);
                         } else {
                             if (paymentData.payment_method === 'credit') {
                                 $('#go-to-sales-btn').attr('href', '{{ route("credits.index") }}');
@@ -694,9 +697,12 @@
                 );
         }
 
-        function checkTransactionStatus(transactionId) {
+        function checkTransactionStatus(transactionId, initialReference = null) {
             let attempts = 0;
-            const maxAttempts = 30;
+            const maxAttempts = 30; // 30 seconds timeout
+
+            // Clear any previous timeout messages
+            $('#timeout-alert').remove();
 
             if (statusCheckInterval) {
                 clearInterval(statusCheckInterval);
@@ -712,6 +718,7 @@
                         if (response.status === 'completed') {
                             clearInterval(statusCheckInterval);
                             $('#payment-processing').addClass('hidden');
+                            $('#payment-processing').find('p.text-sm').text('Please wait while we confirm'); // Reset text
                             currentSaleId = response.sale_id;
                             showReceiptModal(response.sale_id);
 
@@ -729,12 +736,43 @@
                         } else if (response.status === 'failed' || attempts >= maxAttempts) {
                             clearInterval(statusCheckInterval);
                             $('#payment-processing').addClass('hidden');
+                            $('#payment-processing').find('p.text-sm').text('Please wait while we confirm'); // Reset text
                             $('#process-payment').prop('disabled', false).html(
                                 '<i class="fas fa-circle-check"></i> Complete Sale <span class="ml-auto mr-4 rounded-lg bg-blue-800 px-2 py-1 text-xs">F9</span>'
                                 );
-                            showNotification(response.status === 'failed' ?
-                                'Payment failed. Please try again.' :
-                                'Payment timeout. Please check transaction status.', 'warning');
+                                
+                            if (response.status === 'failed') {
+                                showNotification('Payment failed. Please try again.', 'error');
+                            } else {
+                                const ref = response.reference || initialReference || 'N/A';
+                                showNotification(`Payment timeout. Transaction Ref: ${ref}. Please check status manually.`, 'warning');
+                                
+                                // Show a sticky alert so the user can see the ID without prompting again
+                                $('#payment-processing').parent().prepend(`
+                                    <div id="timeout-alert" class="mb-4 rounded-lg bg-yellow-50 p-4 border border-yellow-200">
+                                        <div class="flex">
+                                            <div class="flex-shrink-0">
+                                                <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                                            </div>
+                                            <div class="ml-3">
+                                                <h3 class="text-sm font-medium text-yellow-800">Payment Timeout</h3>
+                                                <div class="mt-2 text-sm text-yellow-700">
+                                                    <p>The M-Pesa prompt timed out. Transaction Reference: <strong>${ref}</strong></p>
+                                                    <p class="mt-1">If the customer paid, check the transactions report to verify.</p>
+                                                </div>
+                                            </div>
+                                            <div class="ml-auto pl-3">
+                                                <div class="-mx-1.5 -my-1.5">
+                                                    <button type="button" onclick="$('#timeout-alert').remove()" class="inline-flex bg-yellow-50 rounded-md p-1.5 text-yellow-500 hover:bg-yellow-100">
+                                                        <span class="sr-only">Dismiss</span>
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `);
+                            }
                         }
                     }
                 });

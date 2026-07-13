@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Product;
+use App\Models\ReturnModel;
 
 class DashboardController extends Controller
 {
@@ -17,45 +18,52 @@ class DashboardController extends Controller
             $period = $request->query('period', 'today');
             $now = Carbon::now();
             
-            $dateCondition = function($query) use ($period, $now) {
-                $query->where('status', 'completed');
+            // Helper function to get date conditions
+            $getDateCondition = function($period, $now) {
+                $condition = [];
                 if ($period === 'today') {
-                    $query->whereDate('created_at', $now->today());
+                    $condition['start'] = $now->copy()->startOfDay();
+                    $condition['end'] = $now->copy()->endOfDay();
                 } elseif ($period === 'week') {
-                    $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+                    $condition['start'] = $now->copy()->startOfWeek();
+                    $condition['end'] = $now->copy()->endOfWeek();
                 } elseif ($period === 'month') {
-                    $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                    $condition['start'] = $now->copy()->startOfMonth();
+                    $condition['end'] = $now->copy()->endOfMonth();
                 } elseif ($period === 'year') {
-                    $query->whereYear('created_at', $now->year);
+                    $condition['start'] = $now->copy()->startOfYear();
+                    $condition['end'] = $now->copy()->endOfYear();
+                } else {
+                    $condition['start'] = $now->copy()->subYears(5);
+                    $condition['end'] = $now->copy();
                 }
+                return $condition;
             };
 
-            // Sales Query
-            $salesQuery = Sale::where('status', 'completed');
-            $dateCondition($salesQuery);
+            $dateRange = $getDateCondition($period, $now);
             
-            // Metrics
+            // ========== SALES (EXCLUDING RETURNS) ==========
+            $salesQuery = Sale::where('status', 'completed')
+                ->where('is_return', false)
+                ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
+            
             $totalSales = $salesQuery->sum('total') ?? 0;
             $totalTransactions = $salesQuery->count();
             $avgSale = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
             
-            // Items Sold
-            $itemsSold = SaleItem::whereHas('sale', function($q) use ($period, $now) {
-                $q->where('status', 'completed');
-                if ($period === 'today') $q->whereDate('created_at', $now->today());
-                elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-                elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-                elseif ($period === 'year') $q->whereYear('created_at', $now->year);
+            // ========== ITEMS SOLD (EXCLUDING RETURNS) ==========
+            $itemsSold = SaleItem::whereHas('sale', function($q) use ($dateRange) {
+                $q->where('status', 'completed')
+                  ->where('is_return', false)
+                  ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
             })->sum('quantity') ?? 0;
             
-            // Gross Profit
+            // ========== GROSS PROFIT (EXCLUDING RETURNS) ==========
             $itemsWithProduct = SaleItem::with('product')
-                ->whereHas('sale', function($q) use ($period, $now) {
-                    $q->where('status', 'completed');
-                    if ($period === 'today') $q->whereDate('created_at', $now->today());
-                    elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-                    elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-                    elseif ($period === 'year') $q->whereYear('created_at', $now->year);
+                ->whereHas('sale', function($q) use ($dateRange) {
+                    $q->where('status', 'completed')
+                      ->where('is_return', false)
+                      ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
                 })
                 ->get();
                 
@@ -64,14 +72,12 @@ class DashboardController extends Controller
             });
             $grossProfit = $totalSales - $totalCost;
             
-            // Top Products
+            // ========== TOP PRODUCTS (EXCLUDING RETURNS) ==========
             $topProducts = SaleItem::with(['product', 'product.category'])
-                ->whereHas('sale', function($q) use ($period, $now) {
-                    $q->where('status', 'completed');
-                    if ($period === 'today') $q->whereDate('created_at', $now->today());
-                    elseif ($period === 'week') $q->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-                    elseif ($period === 'month') $q->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-                    elseif ($period === 'year') $q->whereYear('created_at', $now->year);
+                ->whereHas('sale', function($q) use ($dateRange) {
+                    $q->where('status', 'completed')
+                      ->where('is_return', false)
+                      ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
                 })
                 ->selectRaw('product_id, sum(quantity) as total_qty, sum(total) as total_sales')
                 ->groupBy('product_id')
@@ -79,25 +85,37 @@ class DashboardController extends Controller
                 ->limit(5)
                 ->get();
             
-            // Recent Sales
+            // ========== RECENT SALES (EXCLUDING RETURNS) ==========
             $recentSales = Sale::with('customer')
                 ->where('status', 'completed')
+                ->where('is_return', false)
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get();
             
-            // Low Stock Products
+            // ========== LOW STOCK PRODUCTS ==========
             $lowStockProducts = Product::where('is_active', 1)
                 ->where('stock_quantity', '<=', 10)
                 ->orderBy('stock_quantity', 'asc')
                 ->limit(5)
                 ->get();
 
-            // Sales Chart Data
-            $salesChartData = $this->getSalesChartData($period, $now);
+            // ========== SALES CHART (EXCLUDING RETURNS) ==========
+            $salesChartData = $this->getSalesChartData($dateRange, $period);
             
-            // Payment Chart Data
-            $paymentChartData = $this->getPaymentChartData($period, $now);
+            // ========== PAYMENT CHART (EXCLUDING RETURNS) ==========
+            $paymentChartData = $this->getPaymentChartData($dateRange);
+
+            // ========== RETURNS SUMMARY ==========
+            $returnsQuery = Sale::where('status', 'completed')
+                ->where('is_return', true)
+                ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
+            
+            $totalReturns = abs($returnsQuery->sum('total') ?? 0);
+            $returnCount = $returnsQuery->count();
+            
+            // ========== NET SALES ==========
+            $netSales = $totalSales - $totalReturns;
 
             return view('dashboard', compact(
                 'totalSales',
@@ -110,7 +128,10 @@ class DashboardController extends Controller
                 'lowStockProducts',
                 'period',
                 'salesChartData',
-                'paymentChartData'
+                'paymentChartData',
+                'totalReturns',
+                'returnCount',
+                'netSales'
             ));
             
         } catch (\Exception $e) {
@@ -119,14 +140,15 @@ class DashboardController extends Controller
     }
     
     /**
-     * Get sales chart data based on period
+     * Get sales chart data (EXCLUDING RETURNS)
      */
-    private function getSalesChartData($period, $now)
+    private function getSalesChartData($dateRange, $period)
     {
-        $query = Sale::where('status', 'completed');
+        $query = Sale::where('status', 'completed')
+                     ->where('is_return', false)
+                     ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
         
         if ($period === 'today') {
-            $query->whereDate('created_at', $now->today());
             $salesData = $query->selectRaw('HOUR(created_at) as label, sum(total) as total')
                 ->groupBy('label')->orderBy('label')->get();
                 
@@ -140,16 +162,6 @@ class DashboardController extends Controller
             return ['labels' => $labels, 'data' => $data];
         }
         
-        if ($period !== 'all') {
-            if ($period === 'week') {
-                $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-            } elseif ($period === 'month') {
-                $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-            } elseif ($period === 'year') {
-                $query->whereYear('created_at', $now->year);
-            }
-        }
-        
         $format = $period === 'year' ? '%Y-%m' : '%Y-%m-%d';
         $salesData = $query->selectRaw('DATE_FORMAT(created_at, "' . $format . '") as label, sum(total) as total')
             ->groupBy('label')->orderBy('label')->get();
@@ -161,23 +173,14 @@ class DashboardController extends Controller
     }
     
     /**
-     * Get payment chart data
+     * Get payment chart data (EXCLUDING RETURNS)
      */
-    private function getPaymentChartData($period, $now)
+    private function getPaymentChartData($dateRange)
     {
-        $query = Sale::where('status', 'completed');
-        
-        if ($period === 'today') {
-            $query->whereDate('created_at', $now->today());
-        } elseif ($period === 'week') {
-            $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
-        } elseif ($period === 'month') {
-            $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-        } elseif ($period === 'year') {
-            $query->whereYear('created_at', $now->year);
-        }
-        
-        $paymentData = $query->selectRaw('payment_method, sum(total) as total')
+        $paymentData = Sale::where('status', 'completed')
+            ->where('is_return', false)
+            ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']])
+            ->selectRaw('payment_method, sum(total) as total')
             ->whereNotNull('payment_method')
             ->groupBy('payment_method')
             ->get();
@@ -193,7 +196,7 @@ class DashboardController extends Controller
         ];
     }
 
-    // ====== Report Methods ======
+    // ====== REPORT METHODS ======
     
     /**
      * Sales Report
@@ -209,13 +212,27 @@ class DashboardController extends Controller
         if (is_string($endDate)) {
             $endDate = Carbon::parse($endDate);
         }
-        
+
+        // ========== REGULAR SALES (EXCLUDING RETURNS) ==========
         $sales = Sale::with('user', 'customer')
             ->whereBetween('created_at', [$startDate, $endDate->endOfDay()])
             ->where('status', 'completed')
+            ->where('is_return', false)
             ->orderBy('created_at', 'desc')
             ->paginate(20);
         
+        // ========== RETURNS ==========
+        $returns = Sale::with('user', 'customer')
+            ->whereBetween('created_at', [$startDate, $endDate->endOfDay()])
+            ->where('status', 'completed')
+            ->where('is_return', true)
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        $totalReturns = abs($returns->sum('total'));
+        $returnCount = $returns->count();
+        
+        // ========== SUMMARY ==========
         $summary = [
             'total_sales' => $sales->sum('total'),
             'total_transactions' => $sales->count(),
@@ -223,9 +240,13 @@ class DashboardController extends Controller
             'cash_sales' => $sales->where('payment_method', 'cash')->sum('total'),
             'card_sales' => $sales->where('payment_method', 'card')->sum('total'),
             'mobile_money_sales' => $sales->where('payment_method', 'mobile_money')->sum('total'),
+            'credit_sales' => $sales->where('payment_method', 'credit')->sum('total'),
+            'total_returns' => $totalReturns,
+            'return_count' => $returnCount,
+            'net_sales' => $sales->sum('total') - $totalReturns
         ];
         
-        return view('reports.sales', compact('sales', 'summary', 'startDate', 'endDate'));
+        return view('reports.sales', compact('sales', 'returns', 'summary', 'startDate', 'endDate'));
     }
 
     /**

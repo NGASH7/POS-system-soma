@@ -43,7 +43,7 @@ class CustomerCreditController extends Controller
             'notes' => 'nullable|string'
         ]);
 
-        $reference = 'CR-' . date('Ymd') . '-' . str_pad((CustomerCredit::count() + 1), 4, '0', STR_PAD_LEFT);
+        $reference = $this->generateCreditReference();
 
         $credit = CustomerCredit::create([
             'customer_id' => $validated['customer_id'],
@@ -209,5 +209,47 @@ class CustomerCreditController extends Controller
             'total_balance' => $totalBalance,
             'credits' => $credits
         ]);
+    }
+
+    /**
+     * Generate credit reference with SOMA brand and branch prefix
+     */
+    private function generateCreditReference()
+    {
+        $branchCode = $this->getBranchCode();
+        $date = date('Ymd');
+        
+        $reference = 'SOMA-' . $branchCode . '-CR-' . $date . '-' . str_pad(CustomerCredit::count() + 1, 4, '0', STR_PAD_LEFT);
+        
+        // Check uniqueness
+        $attempts = 0;
+        while (CustomerCredit::where('reference', $reference)->exists() && $attempts < 100) {
+            $number = intval(substr($reference, -4)) + 1;
+            $reference = 'SOMA-' . $branchCode . '-CR-' . $date . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
+            $attempts++;
+        }
+        
+        return $reference;
+    }
+
+    /**
+     * Get the branch code for credit reference
+     */
+    private function getBranchCode()
+    {
+        try {
+            $outlet = \App\Models\Outlet::find(auth()->user()->outlet_id);
+            if ($outlet) {
+                $cleanName = preg_replace('/[^a-zA-Z]/', '', $outlet->name);
+                $code = strtoupper(substr($cleanName, 0, 3));
+                if (strlen($code) < 2) {
+                    $code = 'OUT';
+                }
+                return $code;
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Could not get outlet for branch code: ' . $e->getMessage());
+        }
+        return 'SOM';
     }
 }

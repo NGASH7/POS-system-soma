@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Sale;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -229,5 +230,49 @@ class ReportController extends Controller
         }
         
         return compact('totalRevenue', 'totalCost', 'startDate', 'endDate');
+    }
+
+    public function mpesaTransactions(Request $request)
+    {
+        $startDate = $request->get('start_date', Carbon::now()->startOfMonth());
+        $endDate = $request->get('end_date', Carbon::now());
+        $status = $request->get('status', 'all');
+        
+        if (is_string($startDate)) {
+            $startDate = Carbon::parse($startDate);
+        }
+        if (is_string($endDate)) {
+            $endDate = Carbon::parse($endDate);
+        }
+
+        $query = Transaction::where('provider', 'mpesa')
+            ->whereBetween('created_at', [$startDate, $endDate->endOfDay()]);
+            
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        $transactions = $query->orderBy('created_at', 'desc')->paginate(20);
+
+        // Calculate summaries
+        $summaryQuery = Transaction::where('provider', 'mpesa')
+            ->whereBetween('created_at', [$startDate, $endDate->endOfDay()]);
+            
+        $totalTransactions = (clone $summaryQuery)->count();
+        $completedTransactions = clone $summaryQuery;
+        $completedTransactions = $completedTransactions->where('status', 'completed');
+        
+        $totalVolume = $completedTransactions->sum('amount');
+        $completedCount = $completedTransactions->count();
+        
+        $successRate = $totalTransactions > 0 ? round(($completedCount / $totalTransactions) * 100, 1) : 0;
+
+        $summary = [
+            'total_volume' => $totalVolume,
+            'total_transactions' => $totalTransactions,
+            'success_rate' => $successRate,
+        ];
+
+        return view('reports.mpesa-transactions', compact('transactions', 'startDate', 'endDate', 'status', 'summary'));
     }
 }
