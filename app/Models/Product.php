@@ -24,7 +24,8 @@ class Product extends Model
         'category_id',
         'image',
         'is_active',
-        'is_favorite'
+        'is_favorite',
+        'outlet_id',
     ];
     
     protected $casts = [

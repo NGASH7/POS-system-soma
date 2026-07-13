@@ -10,7 +10,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\CustomerCreditController;
 use App\Http\Controllers\ReturnController;
-use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\StockTransferController;
 use Illuminate\Support\Facades\Route;
 
 // Custom home route that redirects based on user role
@@ -129,25 +129,30 @@ Route::middleware('auth')->group(function () {
     Route::get('/products/warranties', function() { return 'Warranties view coming soon'; })->name('products.warranties');
     Route::get('/stock-adjustments', function() { return 'List Stock Adjustments view coming soon'; })->name('stock-adjustments.index');
     Route::get('/stock-adjustments/create', function() { return 'Add Stock Adjustment view coming soon'; })->name('stock-adjustments.create');
-    Route::get('/stock-transfers', function() { return 'Stock Transfers view coming soon'; })->name('stock-transfers.index');
+    Route::get('/stock-transfers', [StockTransferController::class, 'index'])->name('stock-transfers.index');
+    Route::get('/stock-transfers/create', [StockTransferController::class, 'create'])->name('stock-transfers.create');
+    Route::post('/stock-transfers', [StockTransferController::class, 'store'])->name('stock-transfers.store');
+    Route::get('/stock-transfers/products', [StockTransferController::class, 'products'])->name('stock-transfers.products');
+    Route::get('/stock-transfers/{stockTransfer}', [StockTransferController::class, 'show'])->name('stock-transfers.show');
 
     // ========== Expense Routes ==========
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::get('/expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+
+    // Category routes must be registered before /expenses/{expense}
+    Route::get('/expenses/categories', [ExpenseController::class, 'categories'])->name('expenses.categories');
+    Route::get('/expenses/categories/{category}/edit', [ExpenseController::class, 'editCategory'])->name('expenses.categories.edit');
+    Route::post('/expenses/categories', [ExpenseController::class, 'storeCategory'])->name('expenses.categories.store');
+    Route::put('/expenses/categories/{category}', [ExpenseController::class, 'updateCategory'])->name('expenses.categories.update');
+    Route::delete('/expenses/categories/{category}', [ExpenseController::class, 'deleteCategory'])->name('expenses.categories.delete');
+
     Route::get('/expenses/{expense}', [ExpenseController::class, 'show'])->name('expenses.show');
     Route::get('/expenses/{expense}/edit', [ExpenseController::class, 'edit'])->name('expenses.edit');
     Route::put('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::post('/expenses/{expense}/reject', [ExpenseController::class, 'reject'])->name('expenses.reject');
-
-    // ========== Expense Category Routes ==========
-    Route::get('/expenses/categories', [ExpenseController::class, 'categories'])->name('expenses.categories');
-    Route::get('/expenses/categories/{category}/edit', [ExpenseController::class, 'editCategory'])->name('expenses.categories.edit');
-    Route::post('/expenses/categories', [ExpenseController::class, 'storeCategory'])->name('expenses.categories.store');
-    Route::put('/expenses/categories/{category}', [ExpenseController::class, 'updateCategory'])->name('expenses.categories.update');
-    Route::delete('/expenses/categories/{category}', [ExpenseController::class, 'deleteCategory'])->name('expenses.categories.delete');
 
     // ========== Reports Routes ==========
     Route::get('/reports/sales', [DashboardController::class, 'salesReport'])->name('reports.sales');

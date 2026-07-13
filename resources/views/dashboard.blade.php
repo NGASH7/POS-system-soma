@@ -11,10 +11,15 @@
             </div>
             
             <div class="flex items-center gap-4 relative z-50">
-                <!-- Outlet Button -->
-                <button class="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2 hover:bg-gray-50">
-                    <i class="fas fa-store text-blue-600"></i> Main Outlet <i class="fas fa-chevron-down text-xs ml-1 text-gray-400"></i>
-                </button>
+                <!-- Active Outlet -->
+                @php
+                    $activeOutletId = session('active_outlet_id', auth()->user()->outlet_id ?? 1);
+                    $activeOutlet = \App\Models\Outlet::find($activeOutletId);
+                @endphp
+                <div class="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <i class="fas fa-store text-blue-600"></i>
+                    {{ $activeOutlet->name ?? 'Outlet' }}
+                </div>
                 
                 <!-- Period Dropdown -->
                 <div class="relative group">

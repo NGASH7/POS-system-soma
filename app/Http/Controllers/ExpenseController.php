@@ -52,14 +52,14 @@ class ExpenseController extends Controller
             'expense_date' => 'required|date',
             'payment_method' => 'required|in:cash,card,mobile_money,bank_transfer',
             'vendor' => 'nullable|string|max:255',
-            'receipt_image' => 'nullable|image|mimes:jpeg,png,jpg,pdf|max:5120',
+            'receipt_image' => 'nullable|file|mimes:jpeg,png,jpg,pdf|max:5120',
             'is_recurring' => 'nullable|boolean',
             'recurring_frequency' => 'nullable|in:daily,weekly,monthly,yearly',
             'recurring_end_date' => 'nullable|date|after:expense_date'
         ]);
 
         // Generate reference number
-        $referenceNo = 'EXP-' . date('Ymd') . '-' . str_pad(Expense::count() + 1, 4, '0', STR_PAD_LEFT);
+        $referenceNo = 'EXP-' . date('Ymd') . '-' . str_pad(Expense::withoutGlobalScopes()->count() + 1, 4, '0', STR_PAD_LEFT);
 
         $validated['reference_no'] = $referenceNo;
         $validated['user_id'] = Auth::id();
@@ -98,7 +98,7 @@ class ExpenseController extends Controller
             'expense_date' => 'required|date',
             'payment_method' => 'required|in:cash,card,mobile_money,bank_transfer',
             'vendor' => 'nullable|string|max:255',
-            'receipt_image' => 'nullable|image|mimes:jpeg,png,jpg,pdf|max:5120',
+            'receipt_image' => 'nullable|file|mimes:jpeg,png,jpg,pdf|max:5120',
             'status' => 'required|in:pending,approved,rejected'
         ]);
 
@@ -170,7 +170,8 @@ class ExpenseController extends Controller
             'color' => 'nullable|string'
         ]);
 
-        $validated['slug'] = Str::slug($validated['name']);
+        $validated['slug'] = $this->uniqueSlug($validated['name']);
+        $validated['color'] = $validated['color'] ?? '#6b7280';
         $validated['is_active'] = true;
 
         ExpenseCategory::create($validated);
@@ -188,7 +189,8 @@ class ExpenseController extends Controller
             'is_active' => 'nullable|boolean'
         ]);
 
-        $validated['slug'] = Str::slug($validated['name']);
+        $validated['slug'] = $this->uniqueSlug($validated['name'], $category->id);
+        $validated['color'] = $validated['color'] ?? $category->color ?? '#6b7280';
         $validated['is_active'] = $request->has('is_active');
 
         $category->update($validated);
@@ -214,6 +216,12 @@ class ExpenseController extends Controller
     {
         $query = Expense::query();
 
+        if ($request->category) {
+            $query->where('category_id', $request->category);
+        }
+        if ($request->status) {
+            $query->where('status', $request->status);
+        }
         if ($request->start_date) {
             $query->whereDate('expense_date', '>=', $request->start_date);
         }
@@ -231,5 +239,22 @@ class ExpenseController extends Controller
             'rejected' => $hasStatusColumn ? (clone $query)->where('status', 'rejected')->sum('amount') : 0,
             'count' => $query->count()
         ];
+    }
+
+    private function uniqueSlug(string $name, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($name);
+        $slug = $base;
+        $counter = 1;
+
+        while (
+            ExpenseCategory::where('slug', $slug)
+                ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+                ->exists()
+        ) {
+            $slug = $base . '-' . $counter++;
+        }
+
+        return $slug;
     }
 }

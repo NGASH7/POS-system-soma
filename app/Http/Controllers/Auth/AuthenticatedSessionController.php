@@ -28,6 +28,11 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $user = $request->user();
+        if ($user->isAdmin() && !$request->session()->has('active_outlet_id')) {
+            $request->session()->put('active_outlet_id', $user->outlet_id ?? 1);
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

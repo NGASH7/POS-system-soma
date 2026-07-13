@@ -2,17 +2,19 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToOutlet;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Expense extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToOutlet;
 
     protected $fillable = [
         'reference_no',
         'category_id',
         'user_id',
+        'outlet_id',
         'title',
         'description',
         'amount',
@@ -35,7 +37,7 @@ class Expense extends Model
 
     public function category()
     {
-        return $this->belongsTo(ExpenseCategory::class);
+        return $this->belongsTo(ExpenseCategory::class, 'category_id');
     }
 
     public function user()

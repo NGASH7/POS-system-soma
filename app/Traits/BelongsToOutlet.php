@@ -17,12 +17,9 @@ trait BelongsToOutlet
             if (auth()->hasUser()) {
                 $user = auth()->user();
                 
-                // Admin logic: filter if a specific outlet is selected in session
-                if ($user->isAdmin() && session()->has('active_outlet_id')) {
-                    $builder->where('outlet_id', session('active_outlet_id'));
-                } 
-                // Standard user logic: strictly filter by their assigned outlet
-                elseif (!$user->isAdmin()) {
+                if ($user->isAdmin()) {
+                    $builder->where('outlet_id', session('active_outlet_id', 1));
+                } elseif ($user->outlet_id) {
                     $builder->where('outlet_id', $user->outlet_id);
                 }
             }
@@ -30,6 +27,10 @@ trait BelongsToOutlet
 
         // Automatically assign the correct outlet when creating new records
         static::creating(function ($model) {
+            if (!empty($model->outlet_id)) {
+                return;
+            }
+
             if (auth()->hasUser()) {
                 $user = auth()->user();
                 

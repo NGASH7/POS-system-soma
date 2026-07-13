@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToOutlet;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Sale extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToOutlet;
     
     protected $fillable = [
         'invoice_no',
         'user_id',
+        'outlet_id',
         'customer_id',
         'terminal_id',
         'subtotal',
