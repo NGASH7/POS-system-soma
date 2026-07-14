@@ -899,7 +899,7 @@
                     <a href="{{ route('pos.index') }}" class="nav-dropdown-item">POS</a>
                     <a href="{{ route('sales.mpesa-transactions') }}" class="nav-dropdown-item">M-Pesa Transactions</a>
                     <a href="{{ route('sales.drafts.create') }}" class="nav-dropdown-item">Add Draft</a>
-                    <a href="{{ route('sales.quotations.index') }}" class="nav-dropdown-item">List Quotation</a>
+                    <a href="{{ route('quotations.index') }}" class="nav-dropdown-item">List Quotation</a>
                     <a href="{{ route('sales.quotations.create') }}" class="nav-dropdown-item">Add Quotation</a>
                     <a href="{{ route('sales.discounts') }}" class="nav-dropdown-item">Discounts</a>
                     <a href="{{ route('sales.import') }}" class="nav-dropdown-item">Import Sale</a>

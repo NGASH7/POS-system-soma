@@ -7,6 +7,7 @@ use App\Http\Controllers\CustomerCreditController;
 use App\Http\Controllers\DailyRegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\OutletSwitcherController;
 use App\Http\Controllers\POSController;
 use App\Http\Controllers\ProductController;
@@ -189,6 +190,20 @@ Route::middleware('auth')->group(function () {
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::get('/expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+
+// ========== Quotation Routes ==========
+Route::middleware('auth')->group(function () {
+    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+    Route::get('/quotations/create', [QuotationController::class, 'create'])->name('quotations.create');
+    Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
+    Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
+    Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->name('quotations.edit');
+    Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->name('quotations.update');
+    Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
+    Route::post('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
+    Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
+    Route::get('/quotations/{quotation}/print', [QuotationController::class, 'printQuotation'])->name('quotations.print');
+});
 
     // Category routes must be registered before /expenses/{expense}
     Route::get('/expenses/categories', [ExpenseController::class, 'categories'])->name('expenses.categories');

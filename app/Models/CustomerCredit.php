@@ -53,9 +53,57 @@ class CustomerCredit extends Model
         return 'KES ' . number_format($this->balance, 2);
     }
 
+    /**
+     * Get the progress percentage of payment
+     */
+    public function getProgressPercentage()
+    {
+        if ($this->total_amount == 0) {
+            return 0;
+        }
+        return round(($this->paid_amount / $this->total_amount) * 100, 1);
+    }
+
+    /**
+     * Get the progress percentage as an attribute
+     */
     public function getProgressPercentageAttribute()
     {
-        if ($this->total_amount == 0) return 0;
-        return round(($this->paid_amount / $this->total_amount) * 100, 1);
+        return $this->getProgressPercentage();
+    }
+
+    /**
+     * Check if the credit is fully paid
+     */
+    public function isFullyPaid()
+    {
+        return $this->balance <= 0;
+    }
+
+    /**
+     * Record a payment
+     */
+    public function recordPayment($amount, $method, $notes = null, $user = null)
+    {
+        $paymentHistory = $this->payment_history ?? [];
+        $paymentHistory[] = [
+            'amount' => $amount,
+            'method' => $method,
+            'notes' => $notes ?? '',
+            'date' => now()->toDateTimeString(),
+            'user' => $user ?? auth()->user()->name
+        ];
+
+        $newPaidAmount = $this->paid_amount + $amount;
+        $newBalance = $this->balance - $amount;
+
+        $this->update([
+            'paid_amount' => $newPaidAmount,
+            'balance' => $newBalance,
+            'status' => $newBalance <= 0 ? 'completed' : $this->status,
+            'payment_history' => $paymentHistory
+        ]);
+
+        return $this;
     }
 }

@@ -17,14 +17,20 @@ class CustomerCreditController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20);
 
+        // Fix summary key names to match the view
         $summary = [
-            'total_credit' => CustomerCredit::where('status', '!=', 'completed')->sum('balance'),
-            'active_credits' => CustomerCredit::where('status', 'active')->count(),
-            'overdue_credits' => CustomerCredit::where('status', 'overdue')->count(),
-            'total_customers_with_credit' => CustomerCredit::where('status', '!=', 'completed')->distinct('customer_id')->count()
+            'total_outstanding' => CustomerCredit::whereIn('status', ['active', 'overdue'])->sum('balance'),
+            'active_count' => CustomerCredit::where('status', 'active')->count(),
+            'overdue_total' => CustomerCredit::where('status', 'overdue')->sum('balance'),
+            'overdue_count' => CustomerCredit::where('status', 'overdue')->count(),
+            'completed_count' => CustomerCredit::where('status', 'completed')->count(),
+            'customers_with_credit' => CustomerCredit::whereIn('status', ['active', 'overdue'])->distinct('customer_id')->count()
         ];
 
-        return view('credits.index', compact('credits', 'summary'));
+        // Get customers for filter
+        $customers = Customer::orderBy('name')->get();
+
+        return view('credits.index', compact('credits', 'summary', 'customers'));
     }
 
     public function create()
@@ -120,7 +126,7 @@ class CustomerCreditController extends Controller
     {
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0.01|max:' . $credit->balance,
-            'payment_method' => 'required|in:cash,card,mobile_money',
+            'payment_method' => 'required|in:cash,card,mobile_money,credit',
             'notes' => 'nullable|string'
         ]);
 
@@ -151,9 +157,19 @@ class CustomerCreditController extends Controller
             $customer->decrement('total_credit', $validated['amount']);
             $customer->decrement('available_credit', $validated['amount']);
 
-            // Create a sale record for this payment
+            // Create a UNIQUE sale record for this payment
+            // Generate unique invoice number: PAY-{credit_ref}-{timestamp}
+            $uniqueInvoiceNo = 'PAY-' . $credit->reference . '-' . date('YmdHis') . '-' . rand(100, 999);
+            
+            // Check if invoice_no already exists (just to be safe)
+            $attempts = 0;
+            while (Sale::where('invoice_no', $uniqueInvoiceNo)->exists() && $attempts < 10) {
+                $uniqueInvoiceNo = 'PAY-' . $credit->reference . '-' . date('YmdHis') . '-' . rand(100, 999);
+                $attempts++;
+            }
+
             Sale::create([
-                'invoice_no' => 'PAY-' . $credit->reference,
+                'invoice_no' => $uniqueInvoiceNo,  // Now unique
                 'user_id' => Auth::id(),
                 'customer_id' => $credit->customer_id,
                 'terminal_id' => session()->get('terminal_id', 'TERM-01'),
@@ -166,7 +182,8 @@ class CustomerCreditController extends Controller
                 'payment_method' => $validated['payment_method'],
                 'status' => 'completed',
                 'sale_date' => now(),
-                'notes' => "Payment towards {$credit->reference}"
+                'notes' => "Payment towards {$credit->reference}",
+                'outlet_id' => Auth::user()->outlet_id ?? 1
             ]);
 
             DB::commit();
@@ -209,6 +226,19 @@ class CustomerCreditController extends Controller
             'total_balance' => $totalBalance,
             'credits' => $credits
         ]);
+    }
+
+    public function getBalance($id)
+    {
+        try {
+            $credit = CustomerCredit::findOrFail($id);
+            return response()->json([
+                'balance' => $credit->balance,
+                'reference' => $credit->reference
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Credit not found'], 404);
+        }
     }
 
     /**
