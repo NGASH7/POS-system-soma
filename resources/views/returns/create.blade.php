@@ -103,9 +103,9 @@
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <div class="flex justify-between items-center">
-                    <div>
-                        <span class="text-sm text-gray-500">Refund Amount:</span>
-                        <span id="refundAmount" class="text-2xl font-bold text-red-600 ml-2">KES 0.00</span>
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-500 mr-2">Refund Amount (KES):</span>
+                        <input type="number" id="refundAmountInput" name="refund_amount" step="0.01" class="text-xl font-bold text-red-600 px-3 py-1 border border-gray-300 rounded-lg w-32 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500" value="0.00">
                     </div>
                     <div>
                         <button type="button" id="cancelReturn" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition mr-2">
@@ -223,10 +223,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateRefundAmount() {
         let total = 0;
+        // Add value of returned items
         document.querySelectorAll('.return-item-checkbox:checked').forEach(checkbox => {
             total += Number(checkbox.dataset.price);
         });
-        document.getElementById('refundAmount').textContent = 'KES ' + total.toFixed(2);
+
+        // Subtract value of exchanged items
+        if (document.getElementById('returnType').value === 'exchange') {
+            exchangeItems.forEach(item => {
+                total -= (item.price * item.quantity);
+            });
+        }
+
+        document.getElementById('refundAmountInput').value = total.toFixed(2);
     }
 
     // Exchange toggle
@@ -236,6 +245,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             document.getElementById('exchangeSection').classList.add('hidden');
         }
+        updateRefundAmount(); // Recalculate when type changes
     });
 
     // Add exchange item
@@ -282,6 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         });
         document.getElementById('exchangeItemsList').innerHTML = html;
+        updateRefundAmount(); // Recalculate when exchange items change
     }
 
     document.addEventListener('click', function(e) {

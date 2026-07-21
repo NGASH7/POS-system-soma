@@ -42,27 +42,24 @@ class DashboardController extends Controller
 
             $dateRange = $getDateCondition($period, $now);
             
-            // ========== SALES (EXCLUDING RETURNS) ==========
+            // ========== SALES (NET OF RETURNS) ==========
             $salesQuery = Sale::where('status', 'completed')
-                ->where('is_return', false)
                 ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
             
-            $totalSales = $salesQuery->sum('total') ?? 0;
+            $totalSales = $salesQuery->sum('paid') ?? 0;
             $totalTransactions = $salesQuery->count();
             $avgSale = $totalTransactions > 0 ? $totalSales / $totalTransactions : 0;
             
-            // ========== ITEMS SOLD (EXCLUDING RETURNS) ==========
+            // ========== ITEMS SOLD ==========
             $itemsSold = SaleItem::whereHas('sale', function($q) use ($dateRange) {
                 $q->where('status', 'completed')
-                  ->where('is_return', false)
                   ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
             })->sum('quantity') ?? 0;
             
-            // ========== GROSS PROFIT (EXCLUDING RETURNS) ==========
+            // ========== GROSS PROFIT ==========
             $itemsWithProduct = SaleItem::with('product')
                 ->whereHas('sale', function($q) use ($dateRange) {
                     $q->where('status', 'completed')
-                      ->where('is_return', false)
                       ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
                 })
                 ->get();
@@ -72,11 +69,10 @@ class DashboardController extends Controller
             });
             $grossProfit = $totalSales - $totalCost;
             
-            // ========== TOP PRODUCTS (EXCLUDING RETURNS) ==========
+            // ========== TOP PRODUCTS ==========
             $topProducts = SaleItem::with(['product', 'product.category'])
                 ->whereHas('sale', function($q) use ($dateRange) {
                     $q->where('status', 'completed')
-                      ->where('is_return', false)
                       ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
                 })
                 ->selectRaw('product_id, sum(quantity) as total_qty, sum(total) as total_sales')
@@ -85,10 +81,9 @@ class DashboardController extends Controller
                 ->limit(5)
                 ->get();
             
-            // ========== RECENT SALES (EXCLUDING RETURNS) ==========
+            // ========== RECENT SALES ==========
             $recentSales = Sale::with('customer')
                 ->where('status', 'completed')
-                ->where('is_return', false)
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get();
@@ -107,11 +102,9 @@ class DashboardController extends Controller
             $paymentChartData = $this->getPaymentChartData($dateRange);
 
             // ========== RETURNS SUMMARY ==========
-            $returnsQuery = Sale::where('status', 'completed')
-                ->where('is_return', true)
-                ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
+            $returnsQuery = ReturnModel::whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
             
-            $totalReturns = abs($returnsQuery->sum('total') ?? 0);
+            $totalReturns = $returnsQuery->sum('refund_amount') ?? 0;
             $returnCount = $returnsQuery->count();
             
             // ========== NET SALES ==========
@@ -140,16 +133,15 @@ class DashboardController extends Controller
     }
     
     /**
-     * Get sales chart data (EXCLUDING RETURNS)
+     * Get sales chart data
      */
     private function getSalesChartData($dateRange, $period)
     {
         $query = Sale::where('status', 'completed')
-                     ->where('is_return', false)
                      ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']]);
         
         if ($period === 'today') {
-            $salesData = $query->selectRaw('HOUR(created_at) as label, sum(total) as total')
+            $salesData = $query->selectRaw('HOUR(created_at) as label, sum(paid) as total')
                 ->groupBy('label')->orderBy('label')->get();
                 
             $labels = [];
@@ -163,7 +155,7 @@ class DashboardController extends Controller
         }
         
         $format = $period === 'year' ? '%Y-%m' : '%Y-%m-%d';
-        $salesData = $query->selectRaw('DATE_FORMAT(created_at, "' . $format . '") as label, sum(total) as total')
+        $salesData = $query->selectRaw('DATE_FORMAT(created_at, "' . $format . '") as label, sum(paid) as total')
             ->groupBy('label')->orderBy('label')->get();
             
         return [
@@ -178,9 +170,8 @@ class DashboardController extends Controller
     private function getPaymentChartData($dateRange)
     {
         $paymentData = Sale::where('status', 'completed')
-            ->where('is_return', false)
             ->whereBetween('created_at', [$dateRange['start'], $dateRange['end']])
-            ->selectRaw('payment_method, sum(total) as total')
+            ->selectRaw('payment_method, sum(paid) as total')
             ->whereNotNull('payment_method')
             ->groupBy('payment_method')
             ->get();
@@ -213,37 +204,42 @@ class DashboardController extends Controller
             $endDate = Carbon::parse($endDate);
         }
 
-        // ========== REGULAR SALES (EXCLUDING RETURNS) ==========
-        $sales = Sale::with('user', 'customer')
+        // ========== REGULAR SALES ==========
+        $salesQuery = Sale::with('user', 'customer')
             ->whereBetween('created_at', [$startDate, $endDate->endOfDay()])
-            ->where('status', 'completed')
-            ->where('is_return', false)
-            ->orderBy('created_at', 'desc')
+            ->where('status', 'completed');
+            
+        $totalSales = clone $salesQuery;
+        $totalSales = $totalSales->sum('paid');
+        $totalTransactions = clone $salesQuery;
+        $totalTransactions = $totalTransactions->count();
+
+        $sales = $salesQuery->orderBy('created_at', 'desc')
             ->paginate(20);
         
         // ========== RETURNS ==========
-        $returns = Sale::with('user', 'customer')
+        $returns = ReturnModel::with('user', 'customer')
             ->whereBetween('created_at', [$startDate, $endDate->endOfDay()])
             ->where('status', 'completed')
-            ->where('is_return', true)
             ->orderBy('created_at', 'desc')
             ->get();
         
-        $totalReturns = abs($returns->sum('total'));
+        $totalReturns = $returns->sum('refund_amount');
         $returnCount = $returns->count();
         
         // ========== SUMMARY ==========
+        // Note: sum('paid') naturally includes negative amounts from return sales.
         $summary = [
-            'total_sales' => $sales->sum('total'),
-            'total_transactions' => $sales->count(),
-            'average_sale' => $sales->count() > 0 ? $sales->sum('total') / $sales->count() : 0,
-            'cash_sales' => $sales->where('payment_method', 'cash')->sum('total'),
-            'card_sales' => $sales->where('payment_method', 'card')->sum('total'),
-            'mobile_money_sales' => $sales->where('payment_method', 'mobile_money')->sum('total'),
-            'credit_sales' => $sales->where('payment_method', 'credit')->sum('total'),
+            'total_sales' => $totalSales,
+            'total_transactions' => $totalTransactions,
+            'average_sale' => $totalTransactions > 0 ? $totalSales / $totalTransactions : 0,
+            'cash_sales' => Sale::whereBetween('created_at', [$startDate, $endDate->endOfDay()])->where('status', 'completed')->where('payment_method', 'cash')->sum('paid'),
+            'card_sales' => Sale::whereBetween('created_at', [$startDate, $endDate->endOfDay()])->where('status', 'completed')->where('payment_method', 'card')->sum('paid'),
+            'mobile_money_sales' => Sale::whereBetween('created_at', [$startDate, $endDate->endOfDay()])->where('status', 'completed')->where('payment_method', 'mobile_money')->sum('paid'),
+            'credit_sales' => Sale::whereBetween('created_at', [$startDate, $endDate->endOfDay()])->where('status', 'completed')->where('payment_method', 'credit')->sum('paid'),
             'total_returns' => $totalReturns,
             'return_count' => $returnCount,
-            'net_sales' => $sales->sum('total') - $totalReturns
+            'net_sales' => $totalSales
         ];
         
         return view('reports.sales', compact('sales', 'returns', 'summary', 'startDate', 'endDate'));

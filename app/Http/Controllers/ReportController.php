@@ -35,7 +35,7 @@ class ReportController extends Controller
             ->where('status', 'completed')
             ->get();
         
-        $totalRevenue = $sales->sum('total');
+        $totalRevenue = $sales->sum('paid');
         $totalCost = 0;
         
         foreach ($sales as $sale) {
@@ -53,7 +53,7 @@ class ReportController extends Controller
             $daySales = $sales->where('created_at', '>=', $date->copy()->startOfDay())
                 ->where('created_at', '<=', $date->copy()->endOfDay());
             
-            $dailyRevenue = $daySales->sum('total');
+            $dailyRevenue = $daySales->sum('paid');
             $dailyCost = 0;
             
             foreach ($daySales as $sale) {
@@ -135,7 +135,7 @@ class ReportController extends Controller
         $performanceData = [];
         foreach ($employees as $employee) {
             $sales = $employee->sales;
-            $totalSales = $sales->sum('total');
+            $totalSales = $sales->sum('paid');
             $transactionCount = $sales->count();
             $averageSale = $transactionCount > 0 ? $totalSales / $transactionCount : 0;
             

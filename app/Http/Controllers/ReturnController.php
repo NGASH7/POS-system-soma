@@ -125,6 +125,7 @@ class ReturnController extends Controller
                 'refund_method' => 'required|in:cash,card,credit,mobile_money',
                 'notes' => 'nullable|string',
                 'items' => 'required|json',
+                'refund_amount' => 'required|numeric',
                 'exchange_items' => 'nullable|array',
                 'exchange_items.*.product_id' => 'exists:products,id',
                 'exchange_items.*.quantity' => 'integer|min:1'
@@ -137,13 +138,12 @@ class ReturnController extends Controller
             // Decode items
             $items = json_decode($validated['items'], true);
             
-            // Calculate refund amount
-            $refundAmount = 0;
+            // Use the user-provided refund amount, but still track returned items for restocking
+            $refundAmount = $validated['refund_amount'];
             $returnedItems = [];
             foreach ($items as $itemId) {
                 $saleItem = SaleItem::find($itemId);
                 if ($saleItem) {
-                    $refundAmount += $saleItem->total;
                     $returnedItems[] = $itemId;
                 }
             }
@@ -208,7 +208,7 @@ class ReturnController extends Controller
                 'discount' => 0,
                 'tax' => 0,
                 'total' => -$refundAmount, // NEGATIVE amount
-                'paid' => 0,
+                'paid' => -$refundAmount, // NEGATIVE amount to track cash outflow
                 'change_due' => 0,
                 'payment_method' => 'return',
                 'status' => 'completed',

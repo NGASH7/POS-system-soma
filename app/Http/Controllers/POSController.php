@@ -512,7 +512,7 @@ class POSController extends Controller
 
                     // Update customer
                     if ($paymentData['customer_id'] ?? null) {
-                        $customer = Customer::find($paymentData['customer_id']);
+                        $customer = Customer::withoutGlobalScopes()->find($paymentData['customer_id']);
                         if ($customer) {
                             $customer->increment('total_spent', $totals['total']);
                             $customer->increment('points', floor($totals['total'] / 10));
@@ -634,7 +634,7 @@ class POSController extends Controller
 
             // Update customer total spent if customer exists
             if ($request->customer_id) {
-                $customer = Customer::find($request->customer_id);
+                $customer = Customer::withoutGlobalScopes()->find($request->customer_id);
                 if ($customer) {
                     $customer->increment('total_spent', $totals['total']);
                     $customer->increment('points', floor($totals['total'] / 10));
@@ -732,7 +732,7 @@ class POSController extends Controller
 
             // Update customer
             if ($paymentData['customer_id'] ?? null) {
-                $customer = Customer::find($paymentData['customer_id']);
+                $customer = Customer::withoutGlobalScopes()->find($paymentData['customer_id']);
                 if ($customer) {
                     $customer->increment('total_spent', $totals['total']);
                     $customer->increment('points', floor($totals['total'] / 10));

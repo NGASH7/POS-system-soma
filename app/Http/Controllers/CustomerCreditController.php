@@ -65,9 +65,11 @@ class CustomerCreditController extends Controller
         ]);
 
         // Update customer credit totals
-        $customer = Customer::find($validated['customer_id']);
-        $customer->increment('total_credit', $validated['total_amount']);
-        $customer->increment('available_credit', $validated['total_amount']);
+        $customer = Customer::withoutGlobalScopes()->find($validated['customer_id']);
+        if ($customer) {
+            $customer->increment('total_credit', $validated['total_amount']);
+            $customer->increment('available_credit', $validated['total_amount']);
+        }
 
         return redirect()->route('credits.index')
             ->with('success', "Credit created successfully! Reference: {$reference}");
@@ -98,9 +100,11 @@ class CustomerCreditController extends Controller
 
         // If status changed to completed, adjust customer credit totals
         if ($validated['status'] === 'completed' && $credit->status !== 'completed') {
-            $customer = Customer::find($credit->customer_id);
-            $customer->decrement('total_credit', $credit->balance);
-            $customer->decrement('available_credit', $credit->balance);
+            $customer = Customer::withoutGlobalScopes()->find($credit->customer_id);
+            if ($customer) {
+                $customer->decrement('total_credit', $credit->balance);
+                $customer->decrement('available_credit', $credit->balance);
+            }
         }
 
         $credit->update($validated);
@@ -153,9 +157,11 @@ class CustomerCreditController extends Controller
             ]);
 
             // Update customer credit totals
-            $customer = Customer::find($credit->customer_id);
-            $customer->decrement('total_credit', $validated['amount']);
-            $customer->decrement('available_credit', $validated['amount']);
+            $customer = Customer::withoutGlobalScopes()->find($credit->customer_id);
+            if ($customer) {
+                $customer->decrement('total_credit', $validated['amount']);
+                $customer->decrement('available_credit', $validated['amount']);
+            }
 
             // Create a UNIQUE sale record for this payment
             // Generate unique invoice number: PAY-{credit_ref}-{timestamp}

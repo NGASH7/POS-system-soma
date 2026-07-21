@@ -7,6 +7,7 @@ use App\Http\Controllers\CustomerCreditController;
 use App\Http\Controllers\DailyRegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\OutletSwitcherController;
 use App\Http\Controllers\POSController;
@@ -147,12 +148,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales/import', function () {
         return 'Import Sale view coming soon';
     })->name('sales.import');
-    Route::get('/purchases', function () {
-        return 'List Purchases view coming soon';
-    })->name('purchases.index');
-    Route::get('/purchases/create', function () {
-        return 'Add Purchase view coming soon';
-    })->name('purchases.create');
+    // ========== Purchase Routes ==========
+    Route::get('/purchases', [PurchaseController::class, 'index'])->name('purchases.index');
+    Route::get('/purchases/create', [PurchaseController::class, 'create'])->name('purchases.create');
+    Route::post('/purchases', [PurchaseController::class, 'store'])->name('purchases.store');
+    Route::get('/purchases/{id}', [PurchaseController::class, 'show'])->name('purchases.show');
+    Route::delete('/purchases/{id}', [PurchaseController::class, 'destroy'])->name('purchases.destroy');
+    Route::post('/purchases/suppliers/store', [PurchaseController::class, 'storeSupplier'])->name('purchases.suppliers.store');
     Route::get('/purchases/returns', function () {
         return 'List Purchase Returns view coming soon';
     })->name('purchases.returns');

@@ -159,7 +159,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
                     <div class="relative">
-                        <span class="absolute left-3 top-2 text-gray-500">KES</span>
+                        <span class="absolute left-3 top-2 text-gray-500"></span>
                         <input type="number" name="amount" id="payment-amount" step="0.01" max="{{ $credit->balance }}" required
                                class="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
                     </div>

@@ -32,7 +32,7 @@ class DailyRegisterController extends Controller
             ->where('payment_method', '!=', 'return')
             ->get();
 
-        $totalSales = $sales->sum('total');
+        $totalSales = $sales->sum('paid');
         $totalTransactions = $sales->count();
 
         // Sales by Payment Method
@@ -40,7 +40,7 @@ class DailyRegisterController extends Controller
             ->map(function($group) {
                 return [
                     'count' => $group->count(),
-                    'total' => $group->sum('total')
+                    'total' => $group->sum('paid')
                 ];
             });
 

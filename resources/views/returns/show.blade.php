@@ -40,7 +40,7 @@
 
         <div class="refund-row">
             <span>Amount</span>
-            <span class="refund-amount">${{ number_format($return->refund_amount, 2) }}</span>
+            <span class="refund-amount">KES {{ number_format($return->refund_amount, 2) }}</span>
         </div>
     </div>
 </div>
