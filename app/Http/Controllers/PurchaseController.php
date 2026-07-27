@@ -16,7 +16,10 @@ class PurchaseController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Purchase::with(['supplier', 'outlet', 'user', 'items.product'])
+        // Item details are fetched on demand by the purchase-details drawer.
+        // Loading every item and product here makes the list page increasingly
+        // expensive as the purchase history grows.
+        $query = Purchase::with(['supplier', 'outlet', 'user'])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id');
 

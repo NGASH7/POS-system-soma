@@ -289,147 +289,191 @@
     </div>
 </div>
 
-<!-- Purchase Details Modal -->
-<div id="purchaseDetailsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-blue-600/10 text-blue-600 flex items-center justify-center font-bold">
-                    <i class="fas fa-file-invoice"></i>
-                </div>
-                <div>
-                    <h3 id="modalPoNumber" class="text-lg font-bold text-slate-900">Purchase Details</h3>
-                    <p id="modalPoDate" class="text-xs text-slate-500">Date: -</p>
-                </div>
+<!-- ===== Purchase Details Drawer ===== -->
+<style>
+#pd-overlay { transition: opacity 0.25s ease; }
+#pd-panel   { transition: transform 0.28s cubic-bezier(.4,0,.2,1); }
+#pd-panel.pd-open   { transform: translateX(0); }
+#pd-panel.pd-closed { transform: translateX(100%); }
+</style>
+
+<div id="pd-overlay" class="fixed inset-0 opacity-0 pointer-events-none"
+     style="z-index:99998;background:rgba(15,23,42,0.55);backdrop-filter:blur(3px);"
+     onclick="closePurchaseModal()"></div>
+
+<div id="pd-panel" class="fixed top-0 right-0 h-full pd-closed flex flex-col bg-white shadow-2xl overflow-hidden"
+     style="z-index:99999;width:400px;max-width:94vw;">
+
+    <div class="flex-shrink-0 flex items-center justify-between px-4 py-3"
+         style="background:linear-gradient(135deg,#1e3a5f,#1d4ed8);">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white flex-shrink-0">
+                <i class="fas fa-file-invoice text-sm"></i>
             </div>
-            <button type="button" onclick="closePurchaseModal()" class="w-8 h-8 text-slate-400 hover:text-slate-600 rounded-lg flex items-center justify-center hover:bg-slate-200/60">
+            <div class="min-w-0">
+                <p id="pd-ref" class="font-bold text-white text-sm truncate">Purchase Details</p>
+                <p id="pd-date" class="text-blue-200 text-xs">Loading…</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 ml-2 flex-shrink-0">
+            <button onclick="printPurchaseModal()"
+                class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors">
+                <i class="fas fa-print"></i> Print
+            </button>
+            <button onclick="closePurchaseModal()"
+                class="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors">
                 <i class="fas fa-times"></i>
             </button>
         </div>
+    </div>
 
-        <div id="modalBodyContent" class="p-6 overflow-y-auto space-y-6">
-            <div class="flex justify-center py-8">
-                <div class="animate-spin text-blue-600 text-3xl">
-                    <i class="fas fa-spinner"></i>
-                </div>
-            </div>
-        </div>
-
-        <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-            <button type="button" onclick="closePurchaseModal()" class="soma-btn-secondary">
-                Close
-            </button>
+    <div id="pd-body" class="flex-1 overflow-y-auto p-4 space-y-3" style="font-size:12px;">
+        <div class="flex flex-col items-center justify-center py-12 gap-3">
+            <div class="w-8 h-8 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-slate-400 text-xs">Loading…</p>
         </div>
     </div>
 </div>
 
 @push('scripts')
 <script>
-function viewPurchaseDetails(purchaseId) {
-    const modal = document.getElementById('purchaseDetailsModal');
-    const modalBody = document.getElementById('modalBodyContent');
-    const modalPoNumber = document.getElementById('modalPoNumber');
-    const modalPoDate = document.getElementById('modalPoDate');
+function viewPurchaseDetails(id) {
+    const overlay = document.getElementById('pd-overlay');
+    const panel   = document.getElementById('pd-panel');
+    const body    = document.getElementById('pd-body');
 
-    modal.classList.remove('hidden');
-    modalBody.innerHTML = `
-        <div class="flex justify-center py-12">
-            <div class="animate-spin text-blue-600 text-3xl">
-                <i class="fas fa-spinner"></i>
-            </div>
-        </div>
-    `;
+    overlay.classList.remove('pointer-events-none');
+    overlay.style.opacity = '1';
+    panel.classList.replace('pd-closed','pd-open');
+    document.body.style.overflow = 'hidden';
 
-    fetch(`/purchases/${purchaseId}`, {
-        headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (!data.success) throw new Error(data.message || 'Error loading purchase details');
+    document.getElementById('pd-ref').textContent  = 'Loading…';
+    document.getElementById('pd-date').textContent = '';
+    body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:12px"><div style="width:32px;height:32px;border:3px solid #3b82f6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div><p style="color:#94a3b8;font-size:12px">Loading…</p></div>';
+
+    fetch('/purchases/'+id, { headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+    .then(r=>r.json())
+    .then(data=>{
+        if(!data.success) throw new Error(data.message||'Failed');
         const p = data.purchase;
 
-        modalPoNumber.textContent = `Purchase Ref: ${p.reference_no}`;
-        modalPoDate.textContent = `Purchase Date: ${new Date(p.purchase_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`;
+        document.getElementById('pd-ref').textContent  = p.reference_no || 'PO-'+p.id;
+        const dt = p.purchase_date ? new Date(p.purchase_date).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) : '—';
+        document.getElementById('pd-date').textContent = dt;
 
-        let itemsRows = '';
-        if (p.items && p.items.length > 0) {
-            itemsRows = p.items.map((item, idx) => `
-                <tr class="border-b border-slate-100">
-                    <td class="py-2.5 px-3 text-slate-500 font-medium">${idx + 1}</td>
-                    <td class="py-2.5 px-3 text-slate-800 font-semibold">${item.product ? item.product.name : 'Unknown Product'}</td>
-                    <td class="py-2.5 px-3 text-center text-slate-600 font-medium">${item.quantity}</td>
-                    <td class="py-2.5 px-3 text-right text-slate-700">KES ${parseFloat(item.unit_cost).toFixed(2)}</td>
-                    <td class="py-2.5 px-3 text-right text-slate-900 font-bold">KES ${parseFloat(item.subtotal).toFixed(2)}</td>
-                </tr>
-            `).join('');
-        }
+        const stMap={received:{bg:'#d1fae5',c:'#065f46',d:'#10b981'},pending:{bg:'#fef3c7',c:'#92400e',d:'#f59e0b'},ordered:{bg:'#dbeafe',c:'#1e40af',d:'#3b82f6'},cancelled:{bg:'#fee2e2',c:'#991b1b',d:'#ef4444'}};
+        const pyMap={paid:{bg:'#d1fae5',c:'#065f46'},partial:{bg:'#fef3c7',c:'#92400e'},due:{bg:'#fee2e2',c:'#991b1b'},unpaid:{bg:'#fee2e2',c:'#991b1b'}};
+        const st=stMap[p.status]||{bg:'#f1f5f9',c:'#475569',d:'#94a3b8'};
+        const py=pyMap[p.payment_status]||{bg:'#f1f5f9',c:'#475569'};
 
-        modalBody.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-                <div>
-                    <span class="text-slate-400 block font-semibold uppercase">Supplier</span>
-                    <strong class="text-slate-800 text-sm">${p.supplier ? p.supplier.name : 'N/A'}</strong>
-                    <p class="text-slate-500">${p.supplier && p.supplier.phone ? p.supplier.phone : ''}</p>
-                </div>
-                <div>
-                    <span class="text-slate-400 block font-semibold uppercase">Outlet</span>
-                    <strong class="text-slate-800 text-sm">${p.outlet ? p.outlet.name : 'Main Outlet'}</strong>
-                </div>
-                <div>
-                    <span class="text-slate-400 block font-semibold uppercase">Status & Payment</span>
-                    <span class="inline-block mt-1 font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 uppercase">${p.status}</span>
-                    <span class="inline-block mt-1 font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase">${p.payment_status}</span>
-                </div>
-            </div>
+        const stBadge=`<span style="background:${st.bg};color:${st.c};display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-weight:700;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:${st.d};display:inline-block"></span>${(p.status||'').charAt(0).toUpperCase()+(p.status||'').slice(1)}</span>`;
+        const pyBadge=`<span style="background:${py.bg};color:${py.c};display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-weight:700;font-size:11px">${(p.payment_status||'').charAt(0).toUpperCase()+(p.payment_status||'').slice(1)}</span>`;
 
-            <div>
-                <h4 class="text-sm font-bold text-slate-800 mb-2">Itemized Products</h4>
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
-                    <table class="w-full text-xs">
-                        <thead class="bg-slate-100 text-slate-600 uppercase font-semibold">
-                            <tr>
-                                <th class="py-2.5 px-3 text-left">#</th>
-                                <th class="py-2.5 px-3 text-left">Product</th>
-                                <th class="py-2.5 px-3 text-center">Qty</th>
-                                <th class="py-2.5 px-3 text-right">Unit Cost</th>
-                                <th class="py-2.5 px-3 text-right">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>${itemsRows}</tbody>
-                    </table>
-                </div>
-            </div>
+        let rows=(p.items||[]).map((item,i)=>{
+            const nm=item.product?item.product.name:'Unknown';
+            const sku=item.product&&item.product.sku?item.product.sku:'';
+            const cost=parseFloat(item.unit_cost||0);
+            const sub=parseFloat(item.subtotal||0);
+            return `<tr style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:7px 8px;color:#94a3b8;font-family:monospace">${i+1}</td>
+                <td style="padding:7px 8px"><p style="font-weight:600;color:#1e293b;margin:0">${nm}</p>${sku?`<p style="font-size:10px;color:#94a3b8;margin:1px 0 0;font-family:monospace">${sku}</p>`:''}</td>
+                <td style="padding:7px 8px;text-align:center"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:20px;background:#f1f5f9;border-radius:4px;font-weight:700;color:#334155">${item.quantity}</span></td>
+                <td style="padding:7px 8px;text-align:right;color:#64748b">KES ${cost.toLocaleString('en',{minimumFractionDigits:2})}</td>
+                <td style="padding:7px 8px;text-align:right;font-weight:700;color:#0f172a">KES ${sub.toLocaleString('en',{minimumFractionDigits:2})}</td>
+            </tr>`;
+        }).join('')||'<tr><td colspan="5" style="padding:24px;text-align:center;color:#94a3b8">No items</td></tr>';
 
-            <div class="flex flex-col md:flex-row justify-between gap-4 pt-2">
-                <div class="text-xs text-slate-500">
-                    ${p.notes ? `<p><strong>Notes:</strong> ${p.notes}</p>` : ''}
-                </div>
-                <div class="w-full md:w-64 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-1.5">
-                    <div class="flex justify-between text-slate-600"><span>Subtotal:</span><span>KES ${parseFloat(p.subtotal).toFixed(2)}</span></div>
-                    <div class="flex justify-between text-slate-600"><span>Tax:</span><span>KES ${parseFloat(p.tax || 0).toFixed(2)}</span></div>
-                    <div class="flex justify-between text-slate-600"><span>Discount:</span><span>- KES ${parseFloat(p.discount || 0).toFixed(2)}</span></div>
-                    <div class="flex justify-between text-slate-600"><span>Shipping:</span><span>KES ${parseFloat(p.shipping_cost || 0).toFixed(2)}</span></div>
-                    <div class="border-t border-slate-200 pt-1.5 flex justify-between font-bold text-sm text-slate-900">
-                        <span>Total Amount:</span>
-                        <span>KES ${parseFloat(p.total_amount).toFixed(2)}</span>
-                    </div>
-                    <div class="flex justify-between text-emerald-600 font-semibold"><span>Paid Amount:</span><span>KES ${parseFloat(p.paid_amount || 0).toFixed(2)}</span></div>
-                    <div class="flex justify-between text-amber-600 font-semibold"><span>Balance Due:</span><span>KES ${parseFloat(p.due_amount || 0).toFixed(2)}</span></div>
-                </div>
-            </div>
-        `;
+        const sub2=parseFloat(p.subtotal||0),tax=parseFloat(p.tax||0),disc=parseFloat(p.discount||0),ship=parseFloat(p.shipping_cost||0),total=parseFloat(p.total_amount||0),paid=parseFloat(p.paid_amount||0),due=parseFloat(p.due_amount||0);
+
+        const summaryRow=(label,val,color='#64748b')=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;color:${color}">${label}<span style="font-weight:600">KES ${val.toLocaleString('en',{minimumFractionDigits:2})}</span></div>`;
+
+        body.innerHTML = `
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="border:1px solid #f1f5f9;background:#f8fafc;border-radius:8px;padding:10px">
+        <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px">Supplier</p>
+        <p style="font-weight:700;color:#1e293b;margin:0;line-height:1.3">${p.supplier?p.supplier.name:'—'}</p>
+        ${p.supplier&&p.supplier.phone?`<p style="font-size:10px;color:#64748b;margin:2px 0 0">${p.supplier.phone}</p>`:''}
+    </div>
+    <div style="border:1px solid #f1f5f9;background:#f8fafc;border-radius:8px;padding:10px">
+        <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px">Outlet</p>
+        <p style="font-weight:700;color:#1e293b;margin:0">${p.outlet?p.outlet.name:'Main Outlet'}</p>
+    </div>
+    <div style="border:1px solid #f1f5f9;background:#f8fafc;border-radius:8px;padding:10px">
+        <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px">Status</p>
+        ${stBadge}
+    </div>
+    <div style="border:1px solid #f1f5f9;background:#f8fafc;border-radius:8px;padding:10px">
+        <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px">Payment</p>
+        ${pyBadge}
+    </div>
+</div>
+
+<div style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin:0;display:flex;align-items:center;gap:6px">
+            <span style="width:18px;height:18px;background:#dbeafe;color:#2563eb;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:9px"><i class="fas fa-box"></i></span>
+            Items
+        </p>
+        <span style="font-size:10px;color:#94a3b8">${(p.items||[]).length} item(s)</span>
+    </div>
+    <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead><tr style="background:linear-gradient(90deg,#334155,#475569);color:white">
+                <th style="padding:7px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em">#</th>
+                <th style="padding:7px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em">Product</th>
+                <th style="padding:7px 8px;text-align:center;font-size:9px;text-transform:uppercase;letter-spacing:.05em">Qty</th>
+                <th style="padding:7px 8px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.05em">Cost</th>
+                <th style="padding:7px 8px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.05em">Sub</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>
+</div>
+
+<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:12px">
+    <div style="background:#f8fafc;padding:8px 12px;border-bottom:1px solid #e2e8f0">
+        <p style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin:0">Payment Summary</p>
+    </div>
+    <div style="padding:10px 12px">
+        ${summaryRow('Subtotal',sub2)}
+        ${tax>0?summaryRow('Tax',tax):''}
+        ${disc>0?summaryRow('<span style="color:#e11d48">Discount</span>',disc,'#e11d48'):''}
+        ${ship>0?summaryRow('Shipping',ship):''}
+        <div style="border-top:1px solid #e2e8f0;margin-top:6px;padding-top:8px;display:flex;justify-content:space-between;font-weight:800;font-size:14px;color:#0f172a"><span>Grand Total</span><span>KES ${total.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;color:#059669;font-weight:600"><span style="display:flex;align-items:center;gap:4px"><i class="fas fa-check-circle" style="font-size:10px"></i> Paid</span><span>KES ${paid.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-weight:700;color:${due>0?'#e11d48':'#94a3b8'}"><span style="display:flex;align-items:center;gap:4px"><i class="fas ${due>0?'fa-hourglass-half':'fa-circle-check'}" style="font-size:10px"></i> Balance Due</span><span>KES ${due.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+    </div>
+    <div style="padding:8px 12px;text-align:center;background:${due<=0?'#f0fdf4':'#fff1f2'};border-top:1px solid ${due<=0?'#bbf7d0':'#fecdd3'}">
+        <span style="font-size:11px;font-weight:700;color:${due<=0?'#15803d':'#be123c'}"><i class="fas ${due<=0?'fa-circle-check':'fa-triangle-exclamation'}"></i> ${due<=0?'Fully Paid':'Balance Outstanding'}</span>
+    </div>
+</div>
+
+${p.notes?`<div style="border:1px solid #fef08a;background:#fefce8;border-radius:8px;padding:10px 12px"><p style="font-size:9px;font-weight:700;color:#854d0e;text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px"><i class="fas fa-note-sticky"></i> Notes</p><p style="color:#713f12;margin:0;font-size:11px">${p.notes}</p></div>`:''}`;
     })
-    .catch(err => {
-        modalBody.innerHTML = `<div class="text-rose-600 p-4 text-center text-sm">${err.message}</div>`;
+    .catch(err=>{
+        body.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:10px"><div style="width:40px;height:40px;background:#fee2e2;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:18px"><i class="fas fa-triangle-exclamation"></i></div><p style="font-weight:600;color:#334155;font-size:12px;margin:0">Failed to load</p><p style="color:#94a3b8;font-size:11px;margin:0">${err.message}</p></div>`;
     });
 }
 
 function closePurchaseModal() {
-    document.getElementById('purchaseDetailsModal').classList.add('hidden');
+    const overlay=document.getElementById('pd-overlay');
+    const panel=document.getElementById('pd-panel');
+    overlay.style.opacity='0';
+    overlay.classList.add('pointer-events-none');
+    panel.classList.replace('pd-open','pd-closed');
+    document.body.style.overflow='';
 }
+
+function printPurchaseModal() {
+    const content=document.getElementById('pd-body').innerHTML;
+    const ref=document.getElementById('pd-ref').textContent;
+    const dt=document.getElementById('pd-date').textContent;
+    const w=window.open('','_blank','width=720,height=600');
+    w.document.write('<!DOCTYPE html><html><head><title>'+ref+'</title><style>body{font-family:Arial,sans-serif;font-size:12px;color:#1e293b;padding:20px}h2{font-size:18px;font-weight:800;margin:0 0 4px}@keyframes spin{to{transform:rotate(360deg)}}@media print{body{padding:0}}</style></head><body><h2>'+ref+'</h2><p style="color:#64748b;margin:0 0 16px">'+dt+'</p><hr><div>'+content+'</div><script>window.onload=function(){window.print()}<\/script></body></html>');
+    w.document.close();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePurchaseModal();});
 </script>
 @endpush
 @endsection

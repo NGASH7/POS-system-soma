@@ -7,14 +7,16 @@ use App\Http\Controllers\CustomerCreditController;
 use App\Http\Controllers\DailyRegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
-use App\Http\Controllers\PurchaseController;
-use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\OutletSwitcherController;
 use App\Http\Controllers\POSController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\PurchaseReturnController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ReturnController;
+use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockTransferController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -152,12 +154,17 @@ Route::middleware('auth')->group(function () {
     Route::get('/purchases', [PurchaseController::class, 'index'])->name('purchases.index');
     Route::get('/purchases/create', [PurchaseController::class, 'create'])->name('purchases.create');
     Route::post('/purchases', [PurchaseController::class, 'store'])->name('purchases.store');
+    // Purchase Returns (must be before {id} wildcard)
+    Route::get('/purchases/returns', [PurchaseReturnController::class, 'index'])->name('purchases.returns');
+    Route::get('/purchases/returns/create', [PurchaseReturnController::class, 'create'])->name('purchases.returns.create');
+    Route::post('/purchases/returns', [PurchaseReturnController::class, 'store'])->name('purchases.returns.store');
+    Route::get('/purchases/returns/{id}', [PurchaseReturnController::class, 'show'])->name('purchases.returns.show');
+    Route::delete('/purchases/returns/{id}', [PurchaseReturnController::class, 'destroy'])->name('purchases.returns.destroy');
+    // Purchase wildcard (after specific routes)
+    Route::post('/purchases/suppliers/store', [PurchaseController::class, 'storeSupplier'])->name('purchases.suppliers.store');
+    Route::post('/purchases/products/store', [PurchaseController::class, 'storeProduct'])->name('purchases.products.store');
     Route::get('/purchases/{id}', [PurchaseController::class, 'show'])->name('purchases.show');
     Route::delete('/purchases/{id}', [PurchaseController::class, 'destroy'])->name('purchases.destroy');
-    Route::post('/purchases/suppliers/store', [PurchaseController::class, 'storeSupplier'])->name('purchases.suppliers.store');
-    Route::get('/purchases/returns', function () {
-        return 'List Purchase Returns view coming soon';
-    })->name('purchases.returns');
     Route::get('/products/import-assigned', function () {
         return 'Import Assigned Products view coming soon';
     })->name('products.import-assigned');
@@ -176,12 +183,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/products/warranties', function () {
         return 'Warranties view coming soon';
     })->name('products.warranties');
-    Route::get('/stock-adjustments', function () {
-        return 'List Stock Adjustments view coming soon';
-    })->name('stock-adjustments.index');
-    Route::get('/stock-adjustments/create', function () {
-        return 'Add Stock Adjustment view coming soon';
-    })->name('stock-adjustments.create');
+    // ========== Stock Adjustment Routes ==========
+    Route::middleware('auth')->group(function () {
+        Route::get('/stock-adjustments', [StockAdjustmentController::class, 'index'])->name('stock-adjustments.index');
+        Route::get('/stock-adjustments/create', [StockAdjustmentController::class, 'create'])->name('stock-adjustments.create');
+        Route::post('/stock-adjustments', [StockAdjustmentController::class, 'store'])->name('stock-adjustments.store');
+        Route::get('/stock-adjustments/{stockAdjustment}', [StockAdjustmentController::class, 'show'])->name('stock-adjustments.show');
+        Route::get('/stock-adjustments/{stockAdjustment}/edit', [StockAdjustmentController::class, 'edit'])->name('stock-adjustments.edit');
+        Route::put('/stock-adjustments/{stockAdjustment}', [StockAdjustmentController::class, 'update'])->name('stock-adjustments.update');
+        Route::get('/stock-adjustments/product-stock/{id}', [StockAdjustmentController::class, 'getProductStock'])->name('stock-adjustments.product-stock');
+        Route::put('/stock-adjustments/{stockAdjustment}/complete', [StockAdjustmentController::class, 'complete'])->name('stock-adjustments.complete');
+        Route::put('/stock-adjustments/{stockAdjustment}/cancel', [StockAdjustmentController::class, 'cancel'])->name('stock-adjustments.cancel');
+    });
+
     Route::get('/stock-transfers', [StockTransferController::class, 'index'])->name('stock-transfers.index');
     Route::get('/stock-transfers/create', [StockTransferController::class, 'create'])->name('stock-transfers.create');
     Route::post('/stock-transfers', [StockTransferController::class, 'store'])->name('stock-transfers.store');
@@ -193,19 +207,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
 
-// ========== Quotation Routes ==========
-Route::middleware('auth')->group(function () {
-    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
-    Route::get('/quotations/create', [QuotationController::class, 'create'])->name('quotations.create');
-    Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
-    Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
-    Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->name('quotations.edit');
-    Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->name('quotations.update');
-    Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
-    Route::post('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
-    Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
-    Route::get('/quotations/{quotation}/print', [QuotationController::class, 'printQuotation'])->name('quotations.print');
-});
+    // ========== Quotation Routes ==========
+    Route::middleware('auth')->group(function () {
+        Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+        Route::get('/quotations/create', [QuotationController::class, 'create'])->name('quotations.create');
+        Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
+        Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
+        Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->name('quotations.edit');
+        Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->name('quotations.update');
+        Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
+        Route::post('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
+        Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
+        Route::get('/quotations/{quotation}/print', [QuotationController::class, 'printQuotation'])->name('quotations.print');
+    });
 
     // Category routes must be registered before /expenses/{expense}
     Route::get('/expenses/categories', [ExpenseController::class, 'categories'])->name('expenses.categories');
