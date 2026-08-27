@@ -18,6 +18,7 @@ class Sale extends Model
         'terminal_id',
         'subtotal',
         'discount',
+        'discount_type',
         'tax',
         'total',
         'paid',

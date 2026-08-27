@@ -17,7 +17,8 @@ class UserController extends Controller
     
     public function create()
     {
-        return view('users.create');
+        $outlets = \App\Models\Outlet::where('is_active', true)->get();
+        return view('users.create', compact('outlets'));
     }
     
     public function store(Request $request)
@@ -26,14 +27,16 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,employee'
+            'role' => 'required|in:admin,employee',
+            'outlet_id' => 'nullable|exists:outlets,id'
         ]);
         
         User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role']
+            'role' => $validated['role'],
+            'outlet_id' => $validated['outlet_id'] ?? null
         ]);
         
         return redirect()->route('users.index')
@@ -47,7 +50,8 @@ class UserController extends Controller
                 ->with('error', 'Cannot edit your own account here. Use Profile settings.');
         }
         
-        return view('users.edit', compact('user'));
+        $outlets = \App\Models\Outlet::where('is_active', true)->get();
+        return view('users.edit', compact('user', 'outlets'));
     }
     
     public function update(Request $request, User $user)
@@ -60,7 +64,8 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|in:admin,employee'
+            'role' => 'required|in:admin,employee',
+            'outlet_id' => 'nullable|exists:outlets,id'
         ]);
         
         $user->update($validated);

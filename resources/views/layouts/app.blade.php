@@ -868,7 +868,7 @@
                     <a href="{{ route('products.price-groups') }}" class="nav-dropdown-item">Selling Price Group</a>
                     <a href="{{ route('products.units') }}" class="nav-dropdown-item">Units</a>
                     <a href="{{ route('products.brands') }}" class="nav-dropdown-item">Brands</a>
-                    <a href="{{ route('products.warranties') }}" class="nav-dropdown-item">Warranty</a>
+                    <a href="{{ route('warranties.index') }}" class="nav-dropdown-item">Warranty</a>
                 </div>
             </div>
 
@@ -898,9 +898,8 @@
                     <a href="{{ route('sales.pos-list') }}" class="nav-dropdown-item">List POS</a>
                     <a href="{{ route('pos.index') }}" class="nav-dropdown-item">POS</a>
                     <a href="{{ route('sales.mpesa-transactions') }}" class="nav-dropdown-item">M-Pesa Transactions</a>
-                    <a href="{{ route('sales.drafts.create') }}" class="nav-dropdown-item">Add Draft</a>
                     <a href="{{ route('quotations.index') }}" class="nav-dropdown-item">List Quotation</a>
-                    <a href="{{ route('sales.quotations.create') }}" class="nav-dropdown-item">Add Quotation</a>
+                    <a href="{{ route('quotations.create') }}" class="nav-dropdown-item">Add Quotation</a>
                     <a href="{{ route('sales.discounts') }}" class="nav-dropdown-item">Discounts</a>
                     <a href="{{ route('sales.import') }}" class="nav-dropdown-item">Import Sale</a>
                 </div>
@@ -974,9 +973,7 @@
                     <a href="{{ route('reports.sell-payment') }}" class="nav-dropdown-item">Sell Payment Report</a>
                     <a href="{{ route('reports.purchase-sale') }}" class="nav-dropdown-item">Purchase & Sale Report</a>
                     <a href="{{ route('reports.tax') }}" class="nav-dropdown-item">Tax Report</a>
-                    <a href="{{ route('reports.items') }}" class="nav-dropdown-item">Items Report</a>
-                    <a href="{{ route('reports.stock') }}" class="nav-dropdown-item">Stock Report</a>
-                    <a href="{{ route('reports.inventory') }}" class="nav-dropdown-item">Inventory Report</a>
+                   <a href="{{ route('reports.inventory') }}" class="nav-dropdown-item">Inventory Report</a>
                     <a href="{{ route('reports.employee-performance') }}" class="nav-dropdown-item">Employee Performance</a>
                 </div>
             </div>
@@ -998,6 +995,14 @@
                         class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
                         <i class="fas fa-users-cog"></i>
                         <span>User Management</span>
+                    </a>
+                </div>
+
+                <div class="nav-item">
+                    <a href="{{ route('admin.outlets.index') }}"
+                        class="nav-link {{ request()->routeIs('admin.outlets.*') ? 'active' : '' }}">
+                        <i class="fas fa-store"></i>
+                        <span>Branch Management</span>
                     </a>
                 </div>
 

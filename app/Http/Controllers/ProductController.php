@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\Category;
+use App\Models\Brand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -22,7 +23,8 @@ class ProductController extends Controller
     public function create()
     {
         $categories = Category::orderBy('name')->get();
-        return view('products.create', compact('categories'));
+        $brands = Brand::where('is_active', true)->orderBy('name')->get();
+        return view('products.create', compact('categories', 'brands'));
     }
     
     public function store(Request $request)
@@ -47,7 +49,7 @@ class ProductController extends Controller
                 ->with('success', "Added {$added} to {$product->name}. Stock is now {$newStock}.");
         }
 
-        $outletId = session('active_outlet_id', auth()->user()->outlet_id ?? 1);
+        $outletId = session('active_outlet_id', auth()->user()->outlet_id ?? \App\Models\Outlet::first()?->id ?? 1);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -62,6 +64,7 @@ class ProductController extends Controller
             'stock_quantity' => 'required|integer|min:0',
             'low_stock_threshold' => 'required|integer|min:0',
             'category_id' => 'nullable|exists:categories,id',
+            'brand_id' => 'nullable|exists:brands,id',
             'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
         
@@ -80,7 +83,8 @@ class ProductController extends Controller
     public function edit(Product $product)
     {
         $categories = Category::orderBy('name')->get();
-        return view('products.edit', compact('product', 'categories'));
+        $brands = Brand::where('is_active', true)->orderBy('name')->get();
+        return view('products.edit', compact('product', 'categories', 'brands'));
     }
     
     /**
@@ -151,6 +155,7 @@ class ProductController extends Controller
             'stock_quantity' => 'required|integer|min:0',
             'low_stock_threshold' => 'required|integer|min:0',
             'category_id' => 'nullable|exists:categories,id',
+            'brand_id' => 'nullable|exists:brands,id',
             'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048'
         ]);
         

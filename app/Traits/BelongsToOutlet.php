@@ -18,7 +18,16 @@ trait BelongsToOutlet
                 $user = auth()->user();
                 
                 if ($user->isAdmin()) {
-                    $builder->where('outlet_id', session('active_outlet_id', 1));
+                    $activeOutletId = session('active_outlet_id');
+                    if ($activeOutletId) {
+                        $builder->where('outlet_id', $activeOutletId);
+                    } else {
+                        // Fallback to first available outlet if no session is set
+                        $firstOutletId = Outlet::first()?->id;
+                        if ($firstOutletId) {
+                            $builder->where('outlet_id', $firstOutletId);
+                        }
+                    }
                 } elseif ($user->outlet_id) {
                     $builder->where('outlet_id', $user->outlet_id);
                 }
@@ -35,17 +44,13 @@ trait BelongsToOutlet
                 $user = auth()->user();
                 
                 if ($user->isAdmin()) {
-                    // Admins assign to the active session outlet, or default to 1 (Main)
-                    $model->outlet_id = session('active_outlet_id', 1);
+                    $model->outlet_id = session('active_outlet_id') ?: Outlet::first()?->id;
                 } else {
-                    // Employees assign to their assigned outlet
                     $model->outlet_id = $user->outlet_id;
                 }
             } else {
-                // Console/Seeders fallback
-                if (empty($model->outlet_id)) {
-                    $model->outlet_id = 1;
-                }
+                // Console/Seeders/Tests fallback
+                $model->outlet_id = Outlet::first()?->id;
             }
         });
     }

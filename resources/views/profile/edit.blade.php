@@ -15,13 +15,26 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden sticky top-6">
                 <div class="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-center">
                     <div class="relative inline-block">
-                        <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center mx-auto shadow-lg">
-                            <span class="text-5xl font-bold text-blue-700">
-                                {{ substr(Auth::user()->name, 0, 1) }}
-                            </span>
+                        <!-- Avatar / Profile Photo -->
+                        <div class="w-28 h-28 bg-white rounded-full flex items-center justify-center mx-auto shadow-lg overflow-hidden border-4 border-white">
+                            @if(Auth::user()->profile_photo)
+                                <img src="{{ Storage::url(Auth::user()->profile_photo) }}" 
+                                     alt="{{ Auth::user()->name }}" 
+                                     class="w-full h-full object-cover">
+                            @else
+                                <span class="text-5xl font-bold text-blue-700">
+                                    {{ substr(Auth::user()->name, 0, 1) }}
+                                </span>
+                            @endif
                         </div>
-                        <button onclick="showNotification('Profile picture upload coming soon!', 'info')" 
-                                class="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-md hover:bg-slate-50 transition">
+
+                        <!-- Hidden File Input -->
+                        <input type="file" name="profile_photo" id="profile_photo_input" 
+                               accept="image/*" class="hidden">
+
+                        <!-- Camera Button -->
+                        <button type="button" onclick="document.getElementById('profile_photo_input').click();" 
+                                class="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-md hover:bg-slate-50 transition cursor-pointer">
                             <i class="fas fa-camera text-blue-700 text-sm"></i>
                         </button>
                     </div>
@@ -56,7 +69,7 @@
 
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
-            <!-- Update Profile Form -->
+            <!-- Update Profile Form (Text Only) -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
                     <h2 class="text-lg font-semibold text-slate-900">
@@ -236,6 +249,76 @@ function confirmDelete() {
         document.getElementById('delete-account-form').submit();
     }
 }
+
+// ULTIMATE PHOTO UPLOAD FIX (Using XMLHttpRequest for 100% reliability)
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('profile_photo_input');
+    const cameraIcon = document.querySelector('.fa-camera');
+    
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                
+                // 1. Get the CSRF token
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                if (!csrfToken) {
+                    alert('CSRF token missing! Please refresh the page.');
+                    return;
+                }
+
+                // 2. Prepare the data
+                let formData = new FormData();
+                formData.append('profile_photo', this.files[0]);
+                formData.append('_token', csrfToken);
+                formData.append('_method', 'PATCH'); // This MUST match your route
+
+                // 3. Show a spinning loading wheel instead of the camera
+                if(cameraIcon) {
+                    cameraIcon.className = 'fas fa-spinner fa-spin text-blue-700 text-sm';
+                }
+
+                // 4. Send the request using XMLHttpRequest
+                let xhr = new XMLHttpRequest();
+                xhr.open('POST', '{{ route('profile.update') }}', true);
+
+                xhr.onload = function() {
+                    // Reset the icon back to camera
+                    if(cameraIcon) {
+                        cameraIcon.className = 'fas fa-camera text-blue-700 text-sm';
+                    }
+
+                    if (xhr.status === 200 || xhr.status === 302) {
+                        // SUCCESS: Reload the page to show the new picture!
+                        window.location.reload();
+                    } else {
+                        // ERROR: Show exactly what Laravel said
+                        let errorMsg = 'Unknown server error (Status ' + xhr.status + ')';
+                        try {
+                            let response = JSON.parse(xhr.responseText);
+                            if (response.errors && response.errors.profile_photo) {
+                                errorMsg = response.errors.profile_photo[0];
+                            } else if (response.message) {
+                                errorMsg = response.message;
+                            }
+                        } catch(e) {}
+                        
+                        alert('Upload failed: ' + errorMsg);
+                    }
+                };
+
+                xhr.onerror = function() {
+                    // Reset the icon back to camera
+                    if(cameraIcon) {
+                        cameraIcon.className = 'fas fa-camera text-blue-700 text-sm';
+                    }
+                    alert('Network error. Please check your connection.');
+                };
+
+                xhr.send(formData);
+            }
+        });
+    }
+});
 </script>
 
 <!-- Delete Account Form -->

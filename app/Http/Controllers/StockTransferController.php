@@ -204,7 +204,7 @@ class StockTransferController extends Controller
         $user = Auth::user();
 
         if ($user->isAdmin()) {
-            return (int) ($request->query('outlet_id') ?: session('active_outlet_id', 1));
+            return (int) ($request->query('outlet_id') ?: session('active_outlet_id', \App\Models\Outlet::first()?->id ?? 1));
         }
 
         return $user->outlet_id ? (int) $user->outlet_id : null;

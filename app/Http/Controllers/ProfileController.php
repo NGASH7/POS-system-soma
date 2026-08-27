@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Storage; // <--- Required for file deletion
 use Illuminate\View\View;
 
 class ProfileController extends Controller
@@ -26,13 +27,33 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        // --- 1. Handle Profile Photo Upload ---
+        if ($request->hasFile('profile_photo')) {
+            // Delete the old profile photo if it exists
+            if ($user->profile_photo) {
+                Storage::disk('public')->delete($user->profile_photo);
+            }
+
+            // Store the new image in 'public/profile_photos' directory
+            $path = $request->file('profile_photo')->store('profile_photos', 'public');
+            
+            // Assign the new path to the user model
+            $user->profile_photo = $path;
         }
 
-        $request->user()->save();
+        // --- 2. Handle Name & Email Update ---
+        // fill() will only update the fields validated in ProfileUpdateRequest (name, email)
+        $user->fill($request->validated());
+
+        // Reset email verification if the email address was changed
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        // Save the user model
+        $user->save();
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
@@ -51,7 +72,7 @@ class ProfileController extends Controller
         Auth::logout();
 
         $user->delete();
-
+        
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\InvoiceNumberService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -49,7 +50,6 @@ class QuotationController extends Controller
         $customers = Customer::orderBy('name')->get();
         $products = Product::where('is_active', true)
             ->orderBy('name')
-            ->take(50)
             ->get();
         
         // Generate quotation number
@@ -114,7 +114,7 @@ class QuotationController extends Controller
 
     public function show(Quotation $quotation)
     {
-        $quotation->load(['customer', 'user']);
+        $quotation->load(['customer', 'user', 'convertedSale']);
         return view('quotations.show', compact('quotation'));
     }
 
@@ -225,46 +225,57 @@ class QuotationController extends Controller
         DB::beginTransaction();
 
         try {
-            // Check if items have stock
-            $items = $quotation->items;
+            $items = $quotation->items ?? [];
+            if (empty($items)) {
+                throw new \Exception('Quotation has no line items.');
+            }
+
             foreach ($items as $item) {
-                $product = Product::find($item['product_id']);
+                $product = Product::lockForUpdate()->find($item['product_id']);
                 if (!$product || $product->stock_quantity < $item['quantity']) {
                     throw new \Exception("Insufficient stock for {$item['product_name']}. Available: " . ($product->stock_quantity ?? 0));
                 }
             }
 
-            // Create sale
-            $invoiceNo = 'SALE-' . date('Ymd') . '-' . str_pad(Sale::count() + 1, 4, '0', STR_PAD_LEFT);
-            
+            $invoiceNo = app(InvoiceNumberService::class)->generate();
+            $total = (float) $quotation->total;
+
             $sale = Sale::create([
                 'invoice_no' => $invoiceNo,
                 'user_id' => Auth::id(),
                 'customer_id' => $quotation->customer_id,
                 'terminal_id' => session()->get('terminal_id', 'TERM-01'),
                 'subtotal' => $quotation->subtotal,
-                'discount' => $quotation->discount,
+                'discount' => $quotation->discount ?? 0,
                 'tax' => $quotation->tax,
-                'total' => $quotation->total,
-                'paid' => 0,
+                'total' => $total,
+                'paid' => $total,
                 'change_due' => 0,
-                'payment_method' => 'pending',
-                'status' => 'pending',
+                'payment_method' => 'cash',
+                'status' => 'completed',
                 'sale_date' => now(),
-                'notes' => "Converted from quotation: {$quotation->quotation_no}"
+                'notes' => "Converted from quotation: {$quotation->quotation_no}",
             ]);
 
-            // Create sale items
             foreach ($items as $item) {
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                     'price' => $item['price'],
-                    'total' => $item['price'] * $item['quantity']
+                    'discount' => 0,
+                    'total' => $item['price'] * $item['quantity'],
                 ]);
 
                 Product::where('id', $item['product_id'])->decrement('stock_quantity', $item['quantity']);
+            }
+
+            if ($quotation->customer_id) {
+                $customer = Customer::withoutGlobalScopes()->find($quotation->customer_id);
+                if ($customer) {
+                    $customer->increment('total_spent', $total);
+                    $customer->increment('points', (int) floor($total / 10));
+                }
             }
 
             // Update quotation
@@ -276,7 +287,7 @@ class QuotationController extends Controller
 
             DB::commit();
 
-            return redirect()->route('sales.show', $sale)
+            return redirect()->route('pos.receipt', $sale->id)
                 ->with('success', "Quotation converted to sale successfully! Invoice: {$invoiceNo}");
 
         } catch (\Exception $e) {

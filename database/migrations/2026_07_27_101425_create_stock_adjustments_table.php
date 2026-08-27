@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        Schema::dropIfExists('stock_adjustments');
         Schema::create('stock_adjustments', function (Blueprint $table) {
             $table->id();
             $table->string('adjustment_no')->unique();

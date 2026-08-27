@@ -22,6 +22,7 @@ class Product extends Model
         'low_stock_threshold',
         'category',
         'category_id',
+        'brand_id',
         'image',
         'is_active',
         'is_favorite',
@@ -40,6 +41,11 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
     }
     
     public function saleItems()

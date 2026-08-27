@@ -7,6 +7,8 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Customer;
 use App\Models\Transaction;
+use App\Models\HoldTicket;
+use App\Models\Discount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -55,8 +57,53 @@ class POSController extends Controller
         
         $customers = Customer::orderBy('name')->get();
         $categories = \App\Models\Category::orderBy('name')->get();
+        $availableDiscounts = Discount::validNow()->orderBy('name')->get();
         
-        return view('pos.index', compact('products', 'customers', 'categories'));
+        return view('pos.index', compact('products', 'customers', 'categories', 'availableDiscounts'));
+    }
+
+    public function posList(Request $request)
+    {
+        $query = Sale::with(['customer', 'user', 'items'])
+            ->where('is_return', false);
+
+        // Date filter
+        if ($request->filled('start_date')) {
+            $query->whereDate('sale_date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('sale_date', '<=', $request->end_date);
+        }
+
+        // Payment method filter
+        if ($request->filled('payment_method')) {
+            $query->where('payment_method', $request->payment_method);
+        }
+
+        // Status filter
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Invoice / customer search
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('invoice_no', 'like', "%{$search}%")
+                  ->orWhereHas('customer', fn($c) => $c->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        // Summary KPIs for filtered period
+        $summaryQuery = clone $query;
+        $totalRevenue  = (clone $summaryQuery)->sum('total');
+        $totalDiscount = (clone $summaryQuery)->sum('discount');
+        $totalTax      = (clone $summaryQuery)->sum('tax');
+        $totalCount    = (clone $summaryQuery)->count();
+
+        $sales = $query->orderBy('sale_date', 'desc')->paginate(25)->withQueryString();
+
+        return view('pos.list', compact('sales', 'totalRevenue', 'totalDiscount', 'totalTax', 'totalCount'));
     }
 
     public function addToCart(Request $request)
@@ -200,6 +247,7 @@ class POSController extends Controller
     {
         try {
             session()->forget('pos_cart');
+            session()->forget('pos_discount');
             
             Log::info('Cart cleared');
             
@@ -582,6 +630,8 @@ class POSController extends Controller
             $paid = $request->payment_method === 'credit' ? 0 : ($request->paid_amount ?? $totals['total']);
             $change_due = $request->payment_method === 'credit' ? 0 : (($request->paid_amount ?? $totals['total']) - $totals['total']);
 
+            $appliedDiscount = $totals['applied_discount'] ?? session()->get('pos_discount', null);
+
             // Create sale
             $sale = Sale::create([
                 'invoice_no' => $invoiceNo,
@@ -589,7 +639,8 @@ class POSController extends Controller
                 'customer_id' => $request->customer_id,
                 'terminal_id' => session()->get('terminal_id', 'TERM-01'),
                 'subtotal' => $totals['subtotal'],
-                'discount' => $request->discount ?? 0,
+                'discount' => $totals['discount'],
+                'discount_type' => $appliedDiscount['type'] ?? null,
                 'tax' => $totals['tax'],
                 'total' => $totals['total'],
                 'paid' => $paid,
@@ -598,6 +649,12 @@ class POSController extends Controller
                 'status' => 'completed',
                 'sale_date' => now()
             ]);
+
+            if (!empty($appliedDiscount['id'])) {
+                Discount::where('id', $appliedDiscount['id'])->increment('used_count');
+            }
+
+            session()->forget('pos_discount');
 
             // Create customer credit if payment method is credit
             if ($request->payment_method === 'credit') {
@@ -893,29 +950,227 @@ class POSController extends Controller
         })->values()->toArray();
     }
     
-    private function calculateTotals($cart)
+    private function getCartGrossTotal($cart)
     {
-        if(empty($cart)) {
+        $grossTotal = 0;
+        foreach ($cart as $item) {
+            $grossTotal += $item['price'] * $item['quantity'];
+        }
+        return (float)$grossTotal;
+    }
+
+    private function calculateDiscountAmount($cart, $discountData)
+    {
+        if (empty($cart) || empty($discountData)) {
+            return 0.0;
+        }
+
+        $grossTotal = $this->getCartGrossTotal($cart);
+        if ($grossTotal <= 0) {
+            return 0.0;
+        }
+
+        if (!empty($discountData['id'])) {
+            $discountModel = Discount::find($discountData['id']);
+            if ($discountModel) {
+                return $discountModel->calculateDiscount($grossTotal);
+            }
+        }
+
+        $type = $discountData['type'] ?? 'fixed';
+        $value = (float)($discountData['value'] ?? 0);
+
+        if ($type === 'percentage') {
+            $amount = ($grossTotal * $value) / 100;
+            if (!empty($discountData['max_discount']) && $amount > (float)$discountData['max_discount']) {
+                $amount = (float)$discountData['max_discount'];
+            }
+            return min($amount, $grossTotal);
+        }
+
+        return min($value, $grossTotal);
+    }
+
+    private function calculateTotals($cart, $discountData = null)
+    {
+        if (empty($cart)) {
             return [
-                'subtotal' => 0,
-                'tax' => 0,
-                'total' => 0
+                'gross_total' => 0.0,
+                'discount' => 0.0,
+                'subtotal' => 0.0,
+                'tax' => 0.0,
+                'total' => 0.0,
+                'applied_discount' => null,
             ];
         }
-        
-        $subtotal = 0;
-        foreach($cart as $item) {
-            $subtotal += $item['price'] * $item['quantity'];
+
+        if ($discountData === null) {
+            $discountData = session()->get('pos_discount', null);
         }
-        
-        $tax = $subtotal * 0.16; // 16% VAT
-        $total = $subtotal + $tax;
-        
+
+        $grossTotal = $this->getCartGrossTotal($cart);
+        $discountAmount = $this->calculateDiscountAmount($cart, $discountData);
+
+        // 16% VAT is inclusive in product prices
+        $total = max(0.0, $grossTotal - $discountAmount);
+        $subtotal = $total > 0 ? round($total / 1.16, 2) : 0.0;
+        $tax = $total > 0 ? round($total - $subtotal, 2) : 0.0;
+
         return [
+            'gross_total' => (float)$grossTotal,
+            'discount' => (float)$discountAmount,
             'subtotal' => (float)$subtotal,
             'tax' => (float)$tax,
-            'total' => (float)$total
+            'total' => (float)$total,
+            'applied_discount' => $discountData ? array_merge($discountData, ['amount' => $discountAmount]) : null,
         ];
+    }
+
+    public function applyDiscount(Request $request)
+    {
+        try {
+            $cart = session()->get('pos_cart', []);
+            if (empty($cart)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cart is empty. Add products before applying a discount.'
+                ], 422);
+            }
+
+            $grossTotal = $this->getCartGrossTotal($cart);
+            $discountData = null;
+
+            // 1. By discount model ID
+            if ($request->filled('discount_id')) {
+                $discount = Discount::validNow()->find($request->discount_id);
+                if (!$discount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The selected discount is invalid or expired.'
+                    ], 422);
+                }
+
+                if ($discount->min_spend && $grossTotal < (float)$discount->min_spend) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Minimum spend of KES " . number_format($discount->min_spend, 2) . " required for this discount (Current: KES " . number_format($grossTotal, 2) . ")."
+                    ], 422);
+                }
+
+                $discountData = [
+                    'id' => $discount->id,
+                    'name' => $discount->name,
+                    'code' => $discount->code,
+                    'type' => $discount->type,
+                    'value' => (float)$discount->value,
+                    'max_discount' => (float)$discount->max_discount,
+                    'is_custom' => false,
+                ];
+            }
+            // 2. By promo/coupon code
+            elseif ($request->filled('code')) {
+                $code = strtoupper(trim($request->code));
+                $discount = Discount::validNow()->where('code', $code)->first();
+                if (!$discount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Coupon code '{$code}' is invalid or expired."
+                    ], 422);
+                }
+
+                if ($discount->min_spend && $grossTotal < (float)$discount->min_spend) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Minimum spend of KES " . number_format($discount->min_spend, 2) . " required for this coupon (Current: KES " . number_format($grossTotal, 2) . ")."
+                    ], 422);
+                }
+
+                $discountData = [
+                    'id' => $discount->id,
+                    'name' => $discount->name,
+                    'code' => $discount->code,
+                    'type' => $discount->type,
+                    'value' => (float)$discount->value,
+                    'max_discount' => (float)$discount->max_discount,
+                    'is_custom' => false,
+                ];
+            }
+            // 3. Custom discount
+            elseif ($request->filled('custom_value')) {
+                $type = $request->get('custom_type', 'fixed');
+                $value = (float)$request->custom_value;
+
+                if ($value <= 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Discount value must be greater than 0.'
+                    ], 422);
+                }
+
+                if ($type === 'percentage' && $value > 100) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Percentage discount cannot exceed 100%.'
+                    ], 422);
+                }
+
+                $name = $request->get('custom_name') ? trim($request->custom_name) : ($type === 'percentage' ? "{$value}% Custom Discount" : "KES {$value} Custom Discount");
+
+                $discountData = [
+                    'id' => null,
+                    'name' => $name,
+                    'code' => null,
+                    'type' => $type,
+                    'value' => $value,
+                    'max_discount' => null,
+                    'is_custom' => true,
+                ];
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please provide a discount coupon or custom value.'
+                ], 422);
+            }
+
+            session()->put('pos_discount', $discountData);
+            $totals = $this->calculateTotals($cart, $discountData);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Discount '{$discountData['name']}' applied! Saved KES " . number_format($totals['discount'], 2),
+                'totals' => $totals,
+                'cart' => $this->formatCart($cart),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error applying discount: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to apply discount: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function removeDiscount()
+    {
+        try {
+            session()->forget('pos_discount');
+            $cart = session()->get('pos_cart', []);
+            $totals = $this->calculateTotals($cart);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Discount removed.',
+                'totals' => $totals,
+                'cart' => $this->formatCart($cart),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error removing discount: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove discount'
+            ], 500);
+        }
     }
     
     /**
@@ -925,73 +1180,7 @@ class POSController extends Controller
      */
     private function generateInvoiceNo()
     {
-        // Get branch code
-        $branchCode = $this->getBranchCode();
-        $date = date('Ymd');
-        
-        // Get all invoice numbers for today for this branch
-        $invoices = Sale::where('invoice_no', 'like', "SOMA-{$branchCode}-{$date}-%")
-            ->pluck('invoice_no')
-            ->toArray();
-        
-        // Extract numbers and find the max
-        $numbers = [];
-        foreach ($invoices as $inv) {
-            $parts = explode('-', $inv);
-            $lastPart = end($parts);
-            if (is_numeric($lastPart)) {
-                $numbers[] = intval($lastPart);
-            }
-        }
-        
-        $maxNumber = !empty($numbers) ? max($numbers) : 0;
-        $number = $maxNumber + 1;
-        
-        // Ensure we don't exceed 9999
-        if ($number > 9999) {
-            $number = 1;
-        }
-        
-        $invoiceNo = 'SOMA-' . $branchCode . '-' . $date . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
-        
-        // Double-check uniqueness
-        $attempts = 0;
-        while (Sale::where('invoice_no', $invoiceNo)->exists() && $attempts < 100) {
-            $number++;
-            if ($number > 9999) {
-                $number = 1;
-            }
-            $invoiceNo = 'SOMA-' . $branchCode . '-' . $date . '-' . str_pad($number, 4, '0', STR_PAD_LEFT);
-            $attempts++;
-        }
-        
-        return $invoiceNo;
-    }
-
-    /**
-     * Get the branch code for invoice generation
-     * Returns 3-letter code based on branch name
-     */
-    private function getBranchCode()
-    {
-        try {
-            $outlet = \App\Models\Outlet::find(auth()->user()->outlet_id);
-            if ($outlet) {
-                // Convert branch name to code (e.g., "Westlands Branch" -> "WES")
-                $cleanName = preg_replace('/[^a-zA-Z]/', '', $outlet->name);
-                $code = strtoupper(substr($cleanName, 0, 3));
-                
-                // If code is empty or less than 2 chars, use a fallback
-                if (strlen($code) < 2) {
-                    $code = 'OUT';
-                }
-                return $code;
-            }
-        } catch (\Exception $e) {
-            Log::warning('Could not get outlet for branch code: ' . $e->getMessage());
-        }
-        
-        return 'SOM'; // Default fallback
+        return app(\App\Services\InvoiceNumberService::class)->generate();
     }
     
     public function searchProduct(Request $request)
@@ -1021,6 +1210,135 @@ class POSController extends Controller
         }
     }
     
+    public function holdTicket(Request $request)
+    {
+        try {
+            $cart = session()->get('pos_cart', []);
+
+            if (empty($cart)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot hold an empty cart.'
+                ], 422);
+            }
+
+            $totals = $this->calculateTotals($cart);
+            $itemsCount = collect($cart)->sum('quantity');
+
+            $ticketNo = 'HLD-' . date('Ymd') . '-' . str_pad(HoldTicket::count() + 1, 4, '0', STR_PAD_LEFT);
+
+            $heldTicket = HoldTicket::create([
+                'ticket_number' => $ticketNo,
+                'reference_note' => $request->get('reference_note'),
+                'user_id' => Auth::id() ?? (\App\Models\User::first()->id ?? 1),
+                'customer_id' => $request->get('customer_id'),
+                'cart_data' => $cart,
+                'subtotal' => $totals['subtotal'],
+                'tax' => $totals['tax'],
+                'total_amount' => $totals['total'],
+                'items_count' => $itemsCount,
+                'status' => 'held'
+            ]);
+
+            // Clear active POS cart after holding ticket
+            session()->forget('pos_cart');
+
+            $openHeldCount = HoldTicket::where('status', 'held')->count();
+
+            return response()->json([
+                'success' => true,
+                'ticket_number' => $ticketNo,
+                'held_count' => $openHeldCount,
+                'message' => "Ticket {$ticketNo} held successfully!"
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error holding ticket: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to hold ticket: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getHeldTickets()
+    {
+        try {
+            $heldTickets = HoldTicket::with('customer')
+                ->where('status', 'held')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'tickets' => $heldTickets,
+                'count' => $heldTickets->count()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching held tickets: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'tickets' => [],
+                'count' => 0
+            ]);
+        }
+    }
+
+    public function resumeTicket($id)
+    {
+        try {
+            $ticket = HoldTicket::where('status', 'held')->findOrFail($id);
+
+            // Put ticket cart into POS cart session
+            session()->put('pos_cart', $ticket->cart_data);
+
+            // Mark ticket as resumed
+            $ticket->update(['status' => 'resumed']);
+
+            $cart = session()->get('pos_cart', []);
+
+            return response()->json([
+                'success' => true,
+                'cart' => $this->formatCart($cart),
+                'totals' => $this->calculateTotals($cart),
+                'customer_id' => $ticket->customer_id,
+                'reference_note' => $ticket->reference_note,
+                'message' => "Ticket {$ticket->ticket_number} resumed!"
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error resuming ticket: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to resume ticket'
+            ], 500);
+        }
+    }
+
+    public function cancelTicket($id)
+    {
+        try {
+            $ticket = HoldTicket::findOrFail($id);
+            $ticket->update(['status' => 'cancelled']);
+
+            $openHeldCount = HoldTicket::where('status', 'held')->count();
+
+            return response()->json([
+                'success' => true,
+                'held_count' => $openHeldCount,
+                'message' => "Ticket {$ticket->ticket_number} cancelled"
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error cancelling ticket: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cancel ticket'
+            ], 500);
+        }
+    }
+
     // Additional helper method to get cart count (useful for header badges)
     public function getCartCount()
     {

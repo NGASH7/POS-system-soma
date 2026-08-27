@@ -130,6 +130,17 @@
                             @endforeach
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1.5">Brand</label>
+                        <select name="brand_id" id="field_brand" class="soma-input">
+                            <option value="">No brand</option>
+                            @foreach($brands as $brand)
+                                <option value="{{ $brand->id }}" {{ old('brand_id') == $brand->id ? 'selected' : '' }}>
+                                    {{ $brand->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="flex items-end">
                         <label class="flex items-center gap-2 cursor-pointer pb-2">
                             <input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300 text-blue-600">

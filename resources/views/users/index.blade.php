@@ -17,6 +17,7 @@
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>Branch/Outlet</th>
                         <th class="text-center">Role</th>
                         <th class="text-center">Status</th>
                         <th class="text-center">Actions</th>
@@ -32,6 +33,7 @@
                             @endif
                         </td>
                         <td class="text-slate-500">{{ $user->email }}</td>
+                        <td class="text-sm text-slate-500 font-medium">{{ $user->outlet->name ?? 'No Branch Assigned' }}</td>
                         <td class="text-center">
                             @if($user->role === 'admin')
                                 <span class="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-800">

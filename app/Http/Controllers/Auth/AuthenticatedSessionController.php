@@ -30,7 +30,7 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
         if ($user->isAdmin() && !$request->session()->has('active_outlet_id')) {
-            $request->session()->put('active_outlet_id', $user->outlet_id ?? 1);
+            $request->session()->put('active_outlet_id', $user->outlet_id ?? \App\Models\Outlet::first()?->id ?? 1);
         }
 
         return redirect()->intended(route('dashboard', absolute: false));

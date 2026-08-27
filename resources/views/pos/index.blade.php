@@ -27,9 +27,16 @@
                     class="absolute left-0 right-0 top-12 z-40 hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 </div>
             </div>
-            <div class="ml-auto flex items-center gap-3">
+            <div class="ml-auto flex items-center gap-2">
                 <button id="hold-ticket-btn"
-                    class="hidden h-10 rounded-xl border border-blue-600 px-4 text-sm font-bold text-blue-700 transition hover:bg-blue-50 md:inline-flex md:items-center">Hold Ticket</button>
+                    class="h-10 rounded-xl border border-amber-500 bg-amber-50 px-3.5 text-xs md:text-sm font-bold text-amber-700 transition hover:bg-amber-100 inline-flex items-center gap-2">
+                    <i class="fas fa-pause-circle"></i> Hold Ticket
+                </button>
+                <button id="view-held-tickets-btn"
+                    class="h-10 rounded-xl border border-blue-600 bg-blue-50 px-3.5 text-xs md:text-sm font-bold text-blue-700 transition hover:bg-blue-100 inline-flex items-center gap-2">
+                    <i class="fas fa-list-check"></i> Held Tickets 
+                    <span id="held-tickets-count-badge" class="bg-blue-600 text-white rounded-full px-2 py-0.5 text-xs font-extrabold ml-0.5">0</span>
+                </button>
                 <span class="hidden items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800 md:inline-flex">
                     #{{ $invoiceNumber }}
                 </span>
@@ -153,12 +160,24 @@
                             Add Note
                         </button>
                         <div class="space-y-2 text-sm">
-                            <div class="flex justify-between"><span class="text-slate-500">Subtotal</span><span
+                            <div class="flex justify-between"><span class="text-slate-500">Subtotal (Excl. Tax)</span><span
                                     id="subtotal" class="font-semibold">KES 0.00</span></div>
-                            <div class="flex justify-between"><span class="text-slate-500">Discount</span><span
-                                    class="font-semibold text-rose-600">-KES 0.00</span></div>
-                            <button class="text-sm font-bold text-blue-600">Add Coupon</button>
-                            <div class="flex justify-between"><span class="text-slate-500">Tax (16% VAT)</span><span
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500">Discount</span>
+                                <span id="discount-amount" class="font-semibold text-rose-600">-KES 0.00</span>
+                            </div>
+                            <div class="pt-0.5 pb-0.5">
+                                <button type="button" onclick="openDiscountModal()" id="btn-add-coupon" class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                                    <i class="fas fa-tags text-[11px]"></i> <span>Apply Discount / Promo</span>
+                                </button>
+                                <div id="applied-discount-badge" class="hidden items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 w-full">
+                                    <span id="applied-discount-label" class="truncate">🏷️ Discount Applied</span>
+                                    <button type="button" onclick="removeDiscount()" class="text-emerald-600 hover:text-rose-600 transition-colors shrink-0 ml-1" title="Remove discount">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex justify-between"><span class="text-slate-500">Tax (16% VAT Incl.)</span><span
                                     id="tax" class="font-semibold">KES 0.00</span></div>
                             <div class="flex justify-between"><span class="text-slate-500">Rounding</span><span
                                     class="font-semibold">KES 0.00</span></div>
@@ -363,6 +382,156 @@
             </form>
         </div>
     </div>
+
+    <!-- Hold Ticket Confirmation Modal -->
+    <div id="hold-ticket-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+        <div class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h3 class="text-lg font-extrabold text-slate-900"><i class="fas fa-pause-circle text-amber-500 mr-2"></i>Hold Current Cart</h3>
+                <button type="button" onclick="$('#hold-ticket-modal').addClass('hidden')" class="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-5">
+                <p class="text-xs text-slate-500 mb-4">This will save the current cart to the database so you can process another customer and resume it later.</p>
+                <div class="mb-4">
+                    <label class="mb-1 block text-sm font-bold text-slate-700">Reference Note / Customer Tag (Optional)</label>
+                    <input type="text" id="hold-reference-note" placeholder="e.g. Table 4 or Customer in red shirt" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-amber-500 focus:ring-amber-500">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="$('#hold-ticket-modal').addClass('hidden')" class="rounded-xl px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button type="button" id="confirm-hold-ticket-btn" class="rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-white hover:bg-amber-600">Hold Ticket</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Held Tickets List Modal -->
+    <div id="held-tickets-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+        <div class="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h3 class="text-lg font-extrabold text-slate-900"><i class="fas fa-list-check text-blue-600 mr-2"></i>Open Held Tickets</h3>
+                <button type="button" onclick="$('#held-tickets-modal').addClass('hidden')" class="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-5 max-h-[70vh] overflow-y-auto">
+                <div id="held-tickets-list-container">
+                    <div class="py-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin text-2xl"></i> Loading tickets...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Discount / Coupon Modal -->
+    <div id="discount-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4">
+        <div class="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <i class="fas fa-tags text-blue-600"></i>
+                    <span>Apply Sale Discount</span>
+                </h3>
+                <button type="button" onclick="$('#discount-modal').addClass('hidden')" class="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Discount Tabs -->
+            <div class="flex border-b border-slate-200 bg-slate-50/75 px-5 pt-2">
+                <button type="button" onclick="switchDiscountTab('promos')" id="tab-promos-btn" class="border-b-2 border-blue-600 px-4 py-2.5 text-xs font-bold text-blue-600 transition-all">
+                    <i class="fas fa-bullhorn mr-1.5"></i> Active Promotions
+                </button>
+                <button type="button" onclick="switchDiscountTab('code')" id="tab-code-btn" class="border-b-2 border-transparent px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-all">
+                    <i class="fas fa-ticket-alt mr-1.5"></i> Promo Code
+                </button>
+                <button type="button" onclick="switchDiscountTab('custom')" id="tab-custom-btn" class="border-b-2 border-transparent px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-all">
+                    <i class="fas fa-sliders-h mr-1.5"></i> Custom Discount
+                </button>
+            </div>
+
+            <div class="p-5 max-h-[65vh] overflow-y-auto">
+                <!-- Tab 1: Active Promotions -->
+                <div id="discount-tab-promos" class="space-y-3">
+                    @forelse($availableDiscounts as $disc)
+                        <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition-all">
+                            <div class="min-w-0 flex-1 pr-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-sm text-slate-900 truncate">{{ $disc->name }}</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold {{ $disc->type === 'percentage' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800' }}">
+                                        {{ $disc->formatted_value }}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                    @if($disc->code)
+                                        <span class="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">{{ $disc->code }}</span>
+                                    @endif
+                                    @if($disc->min_spend)
+                                        <span>Min Spend: KES {{ number_format($disc->min_spend, 2) }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <button type="button" onclick="applyDiscountById({{ $disc->id }})" class="soma-btn-primary px-3.5 py-1.5 text-xs font-bold shrink-0">
+                                Apply
+                            </button>
+                        </div>
+                    @empty
+                        <div class="py-8 text-center text-slate-400 text-xs">
+                            <i class="fas fa-tags text-2xl mb-2 block"></i>
+                            No active promotions configured. You can enter a promo code or apply a custom discount.
+                        </div>
+                    @endforelse
+                </div>
+
+                <!-- Tab 2: Promo Code -->
+                <div id="discount-tab-code" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Enter Coupon / Promo Code</label>
+                        <div class="relative">
+                            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                <i class="fas fa-ticket-alt text-xs"></i>
+                            </div>
+                            <input type="text" id="input-coupon-code" placeholder="e.g. LAUNCH10, WELCOME200" class="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2.5 text-sm uppercase tracking-wider font-mono font-bold focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none">
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">Codes apply directly to current cart if spend conditions are met.</p>
+                    </div>
+                    <button type="button" onclick="applyDiscountByCode()" class="soma-btn-primary w-full justify-center py-2.5 font-bold">
+                        Apply Coupon Code
+                    </button>
+                </div>
+
+                <!-- Tab 3: Custom Discount -->
+                <div id="discount-tab-custom" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Discount Type</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="flex items-center gap-2 p-3 rounded-xl border-2 border-blue-600 bg-blue-50/40 cursor-pointer" id="custom-type-percentage-label">
+                                <input type="radio" name="custom_discount_type" value="percentage" checked onchange="setCustomDiscountType('percentage')" class="text-blue-600">
+                                <span class="text-xs font-bold text-slate-900">Percentage (%)</span>
+                            </label>
+                            <label class="flex items-center gap-2 p-3 rounded-xl border-2 border-slate-200 cursor-pointer" id="custom-type-fixed-label">
+                                <input type="radio" name="custom_discount_type" value="fixed" onchange="setCustomDiscountType('fixed')" class="text-blue-600">
+                                <span class="text-xs font-bold text-slate-900">Fixed Amount (KES)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5" id="custom-value-label">Discount Value (%)</label>
+                        <input type="number" step="0.01" min="0.01" id="input-custom-value" placeholder="e.g. 10" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Reason / Note (Optional)</label>
+                        <input type="text" id="input-custom-name" placeholder="e.g. Manager Special, Damaged Packaging" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-xs focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none">
+                    </div>
+
+                    <button type="button" onclick="applyCustomDiscount()" class="soma-btn-primary w-full justify-center py-2.5 font-bold">
+                        Apply Custom Discount
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 @push('scripts')
     <script>
@@ -373,7 +542,13 @@
             update: '{{ url('/pos/update-cart') }}',
             add: '{{ url('/pos/add-to-cart') }}',
             cart: '{{ url('/pos/get-cart') }}',
-            print: '{{ url('/pos/print') }}'
+            print: '{{ url('/pos/print') }}',
+            hold: '{{ url('/pos/hold-ticket') }}',
+            heldList: '{{ url('/pos/held-tickets') }}',
+            resume: '{{ url('/pos/resume-ticket') }}',
+            cancel: '{{ url('/pos/cancel-ticket') }}',
+            applyDiscount: '{{ url('/pos/apply-discount') }}',
+            removeDiscount: '{{ url('/pos/remove-discount') }}'
         };
 
         let cart = [];
@@ -498,8 +673,50 @@
                 }
             });
 
-            $('#save-draft-btn, #hold-ticket-btn').click(function() {
-                showNotification('Ticket saved as draft', 'info');
+            fetchHeldTicketsCount();
+
+            $('#hold-ticket-btn').click(function() {
+                if (cart.length === 0) {
+                    showNotification('Cart is empty. Add items before holding ticket.', 'error');
+                    return;
+                }
+                $('#hold-reference-note').val('');
+                $('#hold-ticket-modal').removeClass('hidden').addClass('flex');
+            });
+
+            $('#confirm-hold-ticket-btn').click(function() {
+                const refNote = $('#hold-reference-note').val();
+                const customerId = $('#customer-id').val();
+
+                $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Holding...');
+
+                $.ajax({
+                    url: urls.hold,
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}',
+                        reference_note: refNote,
+                        customer_id: customerId
+                    },
+                    success: function(res) {
+                        $('#confirm-hold-ticket-btn').prop('disabled', false).html('Hold Ticket');
+                        $('#hold-ticket-modal').addClass('hidden');
+                        if (res.success) {
+                            cart = [];
+                            updateCartDisplay();
+                            $('#held-tickets-count-badge').text(res.held_count);
+                            showNotification(res.message, 'success');
+                        }
+                    },
+                    error: function(xhr) {
+                        $('#confirm-hold-ticket-btn').prop('disabled', false).html('Hold Ticket');
+                        showNotification(xhr.responseJSON?.message || 'Failed to hold ticket', 'error');
+                    }
+                });
+            });
+
+            $('#view-held-tickets-btn').click(function() {
+                openHeldTicketsModal();
             });
 
             $('#print-preview-btn').click(function() {
@@ -819,16 +1036,211 @@
             });
         }
 
+        let activeDiscountTab = 'promos';
+        let currentCustomType = 'percentage';
+        let currentTotals = null;
+
+        function openDiscountModal() {
+            if (cart.length === 0) {
+                showNotification('Please add items to cart before applying a discount', 'error');
+                return;
+            }
+            $('#discount-modal').removeClass('hidden').addClass('flex');
+            switchDiscountTab('promos');
+        }
+
+        function switchDiscountTab(tab) {
+            activeDiscountTab = tab;
+            $('#discount-tab-promos, #discount-tab-code, #discount-tab-custom').addClass('hidden');
+            $('#tab-promos-btn, #tab-code-btn, #tab-custom-btn')
+                .removeClass('border-blue-600 text-blue-600')
+                .addClass('border-transparent text-slate-500');
+
+            if (tab === 'promos') {
+                $('#discount-tab-promos').removeClass('hidden');
+                $('#tab-promos-btn').removeClass('border-transparent text-slate-500').addClass('border-blue-600 text-blue-600');
+            } else if (tab === 'code') {
+                $('#discount-tab-code').removeClass('hidden');
+                $('#tab-code-btn').removeClass('border-transparent text-slate-500').addClass('border-blue-600 text-blue-600');
+                setTimeout(() => $('#input-coupon-code').focus(), 100);
+            } else if (tab === 'custom') {
+                $('#discount-tab-custom').removeClass('hidden');
+                $('#tab-custom-btn').removeClass('border-transparent text-slate-500').addClass('border-blue-600 text-blue-600');
+                setTimeout(() => $('#input-custom-value').focus(), 100);
+            }
+        }
+
+        function setCustomDiscountType(type) {
+            currentCustomType = type;
+            if (type === 'percentage') {
+                $('#custom-type-percentage-label').addClass('border-blue-600 bg-blue-50/40').removeClass('border-slate-200');
+                $('#custom-type-fixed-label').removeClass('border-blue-600 bg-blue-50/40').addClass('border-slate-200');
+                $('#custom-value-label').text('Discount Value (%)');
+                $('#input-custom-value').attr('placeholder', 'e.g. 10');
+            } else {
+                $('#custom-type-fixed-label').addClass('border-blue-600 bg-blue-50/40').removeClass('border-slate-200');
+                $('#custom-type-percentage-label').removeClass('border-blue-600 bg-blue-50/40').addClass('border-slate-200');
+                $('#custom-value-label').text('Discount Amount (KES)');
+                $('#input-custom-value').attr('placeholder', 'e.g. 200');
+            }
+        }
+
+        function applyDiscountById(id) {
+            $.ajax({
+                url: urls.applyDiscount,
+                method: 'POST',
+                data: {
+                    discount_id: id,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#discount-modal').addClass('hidden');
+                        currentTotals = response.totals;
+                        updateCartDisplay(response.totals);
+                        showNotification(response.message, 'success');
+                    } else {
+                        showNotification(response.message || 'Failed to apply discount', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showNotification(xhr.responseJSON?.message || 'Error applying discount', 'error');
+                }
+            });
+        }
+
+        function applyDiscountByCode() {
+            const code = $('#input-coupon-code').val().trim();
+            if (!code) {
+                showNotification('Please enter a coupon code', 'error');
+                return;
+            }
+
+            $.ajax({
+                url: urls.applyDiscount,
+                method: 'POST',
+                data: {
+                    code: code,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#discount-modal').addClass('hidden');
+                        $('#input-coupon-code').val('');
+                        currentTotals = response.totals;
+                        updateCartDisplay(response.totals);
+                        showNotification(response.message, 'success');
+                    } else {
+                        showNotification(response.message || 'Failed to apply coupon', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showNotification(xhr.responseJSON?.message || 'Error applying coupon', 'error');
+                }
+            });
+        }
+
+        function applyCustomDiscount() {
+            const val = parseFloat($('#input-custom-value').val());
+            const name = $('#input-custom-name').val().trim();
+
+            if (!val || val <= 0) {
+                showNotification('Please enter a valid discount value', 'error');
+                return;
+            }
+
+            if (currentCustomType === 'percentage' && val > 100) {
+                showNotification('Percentage discount cannot exceed 100%', 'error');
+                return;
+            }
+
+            $.ajax({
+                url: urls.applyDiscount,
+                method: 'POST',
+                data: {
+                    custom_value: val,
+                    custom_type: currentCustomType,
+                    custom_name: name,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        $('#discount-modal').addClass('hidden');
+                        $('#input-custom-value').val('');
+                        $('#input-custom-name').val('');
+                        currentTotals = response.totals;
+                        updateCartDisplay(response.totals);
+                        showNotification(response.message, 'success');
+                    } else {
+                        showNotification(response.message || 'Failed to apply custom discount', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showNotification(xhr.responseJSON?.message || 'Error applying discount', 'error');
+                }
+            });
+        }
+
+        function removeDiscount() {
+            $.ajax({
+                url: urls.removeDiscount,
+                method: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        currentTotals = response.totals;
+                        updateCartDisplay(response.totals);
+                        showNotification(response.message, 'info');
+                    }
+                },
+                error: function(xhr) {
+                    showNotification('Error removing discount', 'error');
+                }
+            });
+        }
+
+        function addToCart(productId) {
+            $.ajax({
+                url: urls.add,
+                method: 'POST',
+                data: {
+                    product_id: productId,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        cart = response.cart;
+                        currentTotals = response.totals || null;
+                        updateCartDisplay(response.totals);
+
+                        const product = cart.find(item => item.id == productId);
+                        if (product) {
+                            showNotification(`${product.name} added to cart!`);
+                        }
+                        playSound('add');
+                    }
+                },
+                error: function(xhr) {
+                    const message = xhr.responseJSON?.message || 'Error adding product to cart';
+                    showNotification(message, 'error');
+                }
+            });
+        }
+
         function loadCartFromServer() {
             $.ajax({
                 url: urls.cart,
                 method: 'GET',
                 success: function(data) {
                     cart = data.success && data.cart ? data.cart : [];
-                    updateCartDisplay();
+                    currentTotals = data.totals || null;
+                    updateCartDisplay(data.totals);
                 },
                 error: function() {
                     cart = [];
+                    currentTotals = null;
                     updateCartDisplay();
                 }
             });
@@ -846,7 +1258,8 @@
                 success: function(response) {
                     if (response.success) {
                         cart = response.cart;
-                        updateCartDisplay();
+                        currentTotals = response.totals || null;
+                        updateCartDisplay(response.totals);
                     }
                 },
                 error: function(xhr) {
@@ -856,7 +1269,10 @@
             });
         }
 
-        function updateCartDisplay() {
+        function updateCartDisplay(serverTotals = null) {
+            if (serverTotals) {
+                currentTotals = serverTotals;
+            }
             const itemCount = cart.reduce((sum, item) => sum + Number(item.quantity), 0);
             $('#cart-count-label').text(`(${itemCount} ${itemCount === 1 ? 'item' : 'items'})`);
 
@@ -868,16 +1284,17 @@
                         <p class="mt-1 text-xs text-slate-400">Scan or select products to begin.</p>
                     </div>
                 `);
-                setTotals(0, 0, 0);
+                currentTotals = null;
+                setTotals(0, 0, 0, 0, null);
                 return;
             }
 
-            let subtotal = 0;
+            let grossTotal = 0;
             let html = '';
 
             cart.forEach((item) => {
                 const total = item.price * item.quantity;
-                subtotal += total;
+                grossTotal += total;
 
                 html += `
                     <div class="cart-item-added flex gap-4 border-b border-slate-100 pb-4 last:border-b-0">
@@ -910,18 +1327,37 @@
                 `;
             });
 
-            const tax = subtotal * 0.16;
-            const total = subtotal + tax;
             $('#cart-items').html(html);
-            setTotals(subtotal, tax, total);
+
+            if (currentTotals) {
+                setTotals(currentTotals.subtotal, currentTotals.tax, currentTotals.total, currentTotals.discount || 0, currentTotals.applied_discount);
+            } else {
+                const total = grossTotal;
+                const netSubtotal = total > 0 ? (total / 1.16) : 0;
+                const tax = total > 0 ? (total - netSubtotal) : 0;
+                setTotals(netSubtotal, tax, total, 0, null);
+            }
         }
 
-        function setTotals(subtotal, tax, total) {
-            $('#subtotal').text(`KES ${subtotal.toFixed(2)}`);
-            $('#tax').text(`KES ${tax.toFixed(2)}`);
-            $('#total').text(`KES ${total.toFixed(2)}`);
-            $('#payment-total').text(`KES ${total.toFixed(2)}`);
+        function setTotals(subtotal, tax, total, discountAmount = 0, appliedDiscount = null) {
+            $('#subtotal').text(`KES ${Number(subtotal).toFixed(2)}`);
+            $('#tax').text(`KES ${Number(tax).toFixed(2)}`);
+            $('#total').text(`KES ${Number(total).toFixed(2)}`);
+            $('#payment-total').text(`KES ${Number(total).toFixed(2)}`);
             $('#points-earned').text(Math.floor(total / 100));
+
+            if (discountAmount > 0) {
+                $('#discount-amount').text(`-KES ${Number(discountAmount).toFixed(2)}`);
+                $('#btn-add-coupon').addClass('hidden');
+                $('#applied-discount-badge').removeClass('hidden').addClass('flex');
+                const label = appliedDiscount ? (appliedDiscount.code ? `🏷️ ${appliedDiscount.code} (-KES ${Number(discountAmount).toFixed(2)})` : `🏷️ ${appliedDiscount.name} (-KES ${Number(discountAmount).toFixed(2)})`) : `🏷️ -KES ${Number(discountAmount).toFixed(2)}`;
+                $('#applied-discount-label').text(label);
+            } else {
+                $('#discount-amount').text(`-KES 0.00`);
+                $('#btn-add-coupon').removeClass('hidden');
+                $('#applied-discount-badge').removeClass('flex').addClass('hidden');
+            }
+
             updateQuickCash(total);
             updateChangeDue();
         }
@@ -930,12 +1366,10 @@
             const rounded = Math.ceil(total / 100) * 100;
             const values = [rounded, rounded + 500, rounded + 1000, rounded + 5000].filter((value, index, array) => value >
                 0 && array.indexOf(value) === index);
-            let html = '';
-            values.slice(0, 4).forEach(value => {
-                html +=
-                    `<button type="button" class="quick-cash-btn rounded-lg border border-slate-200 px-3 py-3 text-xs font-bold text-slate-700 hover:border-blue-400 hover:bg-blue-50" data-amount="${value}">KES ${Number(value).toLocaleString()}</button>`;
-            });
-            $('#quick-cash-buttons').html(html);
+            const buttons = values.map(value =>
+                `<button type="button" class="quick-cash-btn rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" data-amount="${value}">KES ${value.toLocaleString()}</button>`
+            ).join('');
+            $('#quick-cash-buttons').html(buttons);
         }
 
         function updateChangeDue() {
@@ -951,8 +1385,7 @@
             if (change >= 0) {
                 $('#change-due').text(`KES ${change.toFixed(2)}`).removeClass('text-rose-600').addClass('text-emerald-600');
             } else {
-                $('#change-due').text(`KES ${Math.abs(change).toFixed(2)} short`).removeClass('text-emerald-600').addClass(
-                    'text-rose-600');
+                $('#change-due').text(`KES ${Math.abs(change).toFixed(2)} short`).removeClass('text-emerald-600').addClass('text-rose-600');
             }
         }
 
@@ -970,11 +1403,14 @@
         });
 
         function calculateCartTotal() {
-            let subtotal = 0;
+            if (currentTotals && typeof currentTotals.total !== 'undefined') {
+                return currentTotals.total;
+            }
+            let total = 0;
             cart.forEach(item => {
-                subtotal += item.price * item.quantity;
+                total += item.price * item.quantity;
             });
-            return subtotal + (subtotal * 0.16);
+            return total;
         }
 
         function escapeHtml(text) {
@@ -1031,5 +1467,124 @@
                 }
             });
         });
+
+        function fetchHeldTicketsCount() {
+            $.ajax({
+                url: urls.heldList,
+                method: 'GET',
+                success: function(res) {
+                    if (res.success) {
+                        $('#held-tickets-count-badge').text(res.count);
+                    }
+                }
+            });
+        }
+
+        function openHeldTicketsModal() {
+            $('#held-tickets-modal').removeClass('hidden').addClass('flex');
+            $('#held-tickets-list-container').html('<div class="py-8 text-center text-slate-400"><i class="fas fa-spinner fa-spin text-2xl"></i> Loading tickets...</div>');
+
+            $.ajax({
+                url: urls.heldList,
+                method: 'GET',
+                success: function(res) {
+                    if (res.success && res.tickets.length > 0) {
+                        let html = '<div class="space-y-3">';
+                        res.tickets.forEach(ticket => {
+                            const itemsCount = ticket.items_count || 0;
+                            const customerName = ticket.customer ? ticket.customer.name : 'Walk-in Customer';
+                            const refNote = ticket.reference_note ? `<span class="inline-block bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold ml-2">${escapeHtml(ticket.reference_note)}</span>` : '';
+                            const dateStr = new Date(ticket.created_at).toLocaleString();
+
+                            html += `
+                                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono font-bold text-slate-900">${ticket.ticket_number}</span>
+                                            ${refNote}
+                                        </div>
+                                        <div class="text-xs text-slate-500 mt-1">
+                                            <span><i class="fas fa-user text-slate-400 mr-1"></i>${escapeHtml(customerName)}</span>
+                                            <span class="mx-2">•</span>
+                                            <span><i class="fas fa-box text-slate-400 mr-1"></i>${itemsCount} Items</span>
+                                            <span class="mx-2">•</span>
+                                            <span><i class="fas fa-clock text-slate-400 mr-1"></i>${dateStr}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-3 justify-between md:justify-end">
+                                        <div class="text-right">
+                                            <span class="block text-xs text-slate-400 uppercase font-semibold">Total</span>
+                                            <span class="font-extrabold text-slate-900 text-base">KES ${Number(ticket.total_amount).toFixed(2)}</span>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button onclick="resumeHeldTicket(${ticket.id})" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                                                <i class="fas fa-play"></i> Resume
+                                            </button>
+                                            <button onclick="cancelHeldTicket(${ticket.id})" class="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-2 rounded-xl text-xs font-bold transition">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                        $('#held-tickets-list-container').html(html);
+                    } else {
+                        $('#held-tickets-list-container').html(`
+                            <div class="py-12 text-center text-slate-400">
+                                <i class="fas fa-pause-circle text-4xl mb-2 block text-slate-300"></i>
+                                No held tickets at the moment.
+                            </div>
+                        `);
+                    }
+                }
+            });
+        }
+
+        window.resumeHeldTicket = function(id) {
+            if (cart.length > 0) {
+                if (!confirm('Active cart contains items. Overwrite active cart with held ticket?')) {
+                    return;
+                }
+            }
+
+            $.ajax({
+                url: `${urls.resume}/${id}`,
+                method: 'POST',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function(res) {
+                    if (res.success) {
+                        $('#held-tickets-modal').addClass('hidden');
+                        loadCartFromServer();
+                        fetchHeldTicketsCount();
+                        if (res.customer_id) {
+                            $('#customer-id').val(res.customer_id);
+                        }
+                        showNotification(res.message, 'success');
+                    }
+                },
+                error: function(xhr) {
+                    showNotification(xhr.responseJSON?.message || 'Failed to resume ticket', 'error');
+                }
+            });
+        };
+
+        window.cancelHeldTicket = function(id) {
+            if (!confirm('Cancel and remove this held ticket?')) return;
+
+            $.ajax({
+                url: `${urls.cancel}/${id}`,
+                method: 'DELETE',
+                data: { _token: '{{ csrf_token() }}' },
+                success: function(res) {
+                    if (res.success) {
+                        $('#held-tickets-count-badge').text(res.held_count);
+                        openHeldTicketsModal();
+                        showNotification(res.message, 'info');
+                    }
+                }
+            });
+        };
     </script>
 @endpush
